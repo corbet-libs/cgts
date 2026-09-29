@@ -1,0 +1,17 @@
+[package]
+name = "cgts"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Gatekeeping facade of cvld: runs gates and collects gate results per community"
+license = "FSL-1.1-ALv2"
+repository = "https://github.com/corbet-libs/cgts"
+readme = "README.md"
+publish = false
+include = ["Cargo.toml", "src/**", "README.md", "LICENSE.md"]
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
