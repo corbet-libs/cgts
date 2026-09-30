@@ -471,7 +471,11 @@ async fn every_retained_provider_expiry_is_rounded_down_to_a_day() {
                 gate: "day".into(),
                 provider: "local".into(),
                 level: GateLevel::Community,
-                steps: vec![],
+                steps: vec![Step {
+                    id: "check".into(),
+                    description: "Check a fixture expiry".into(),
+                    input: "unit".into(),
+                }],
             }
         }
         async fn verify(&self, _: Context<'_>, _: &()) -> Result<Proof> {
