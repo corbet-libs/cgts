@@ -173,6 +173,8 @@ pub struct CheckedGate {
     pub(crate) revision: u64,
     pub(crate) epoch: u64,
     pub(crate) now: i64,
+    pub(crate) settings: crbk::Values,
+    pub(crate) issued: i64,
 }
 
 impl CheckedGate {
@@ -191,6 +193,8 @@ impl CheckedGate {
             || self.revision != context.snapshot.revision
             || self.epoch != context.snapshot.policy_epoch
             || self.now != context.now
+            || self.settings != context.snapshot.content
+            || self.issued != context.snapshot.issued
         {
             return Err(Error::Scope);
         }

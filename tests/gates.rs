@@ -435,3 +435,28 @@ async fn voucher_is_member_bound_and_uses_coarse_policy_validity() {
         1
     );
 }
+
+#[tokio::test]
+async fn checked_evidence_cannot_hide_changed_settings_behind_the_same_revision() {
+    let actual = snapshot("garden", "cvch");
+    let mut altered = actual.clone();
+    altered
+        .content
+        .insert(gates::VOUCHER_VALIDITY_DAYS.into(), 365.into());
+    let keeper = memory("garden");
+    let receipt = keeper
+        .run(
+            context(&altered),
+            &gate(),
+            &voucher("garden", "altered-policy", 2000),
+        )
+        .await
+        .unwrap();
+    assert_eq!(receipt.in_context(context(&actual)), Err(Error::Scope));
+    let mut altered_time = altered.clone();
+    altered_time.issued -= 1;
+    assert_eq!(
+        receipt.in_context(context(&altered_time)),
+        Err(Error::Scope)
+    );
+}

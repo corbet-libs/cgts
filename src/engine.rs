@@ -141,6 +141,8 @@ impl<S: Storage, L: LegalVeto> Gatekeeper<S, L> {
             revision: context.snapshot.revision,
             epoch: context.snapshot.policy_epoch,
             now: context.now,
+            settings: context.snapshot.content.clone(),
+            issued: context.snapshot.issued,
         })
     }
 
@@ -166,6 +168,8 @@ impl<S: Storage, L: LegalVeto> Gatekeeper<S, L> {
             revision: context.snapshot.revision,
             epoch: context.snapshot.policy_epoch,
             now: context.now,
+            settings: context.snapshot.content.clone(),
+            issued: context.snapshot.issued,
         };
         let mut gates: Vec<_> = self.current(context).await?.into_iter().map(bind).collect();
         let mut seen = std::collections::BTreeSet::new();

@@ -53,6 +53,8 @@ impl VerifiedPassport {
                 revision: context.snapshot.revision,
                 epoch: context.snapshot.policy_epoch,
                 now: context.now,
+                settings: context.snapshot.content.clone(),
+                issued: context.snapshot.issued,
             })
             .collect())
     }

@@ -96,3 +96,8 @@ legal vetoes and compile-fail capability boundaries. It also rejects floating or
 duplicated corbet dependency revisions in Cargo.lock and cargo metadata. The
 optional live Turso test uses a disposable database only when credentials are
 provided. No Cargo runs on the workstation.
+
+Checked receipts bind the complete resolved setting values and authenticated
+publication issuance time as well as revision/epoch. Reusing a revision while
+changing a gate parameter cannot transplant a receipt into cplc's publication.
+These bindings are transient and never written to the gate result tables.
