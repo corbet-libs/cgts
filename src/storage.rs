@@ -93,13 +93,12 @@ impl Storage for MemoryStore {
     async fn commit(&self, result: Option<&GateResult>, claim: Option<&Claim>) -> Result<()> {
         validate(result)?;
         let mut state = self.state.lock().map_err(|_| Error::Storage)?;
-        if let Some(claim) = claim {
-            if !state
+        if let Some(claim) = claim
+            && !state
                 .claims
                 .insert((claim.domain.clone(), claim.marker.clone()))
-            {
-                return Err(Error::Refused);
-            }
+        {
+            return Err(Error::Refused);
         }
         if let Some(result) = result {
             state.results.insert(
