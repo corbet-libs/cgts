@@ -5,11 +5,13 @@
 mod engine;
 pub mod gates;
 mod model;
+mod passport;
 pub mod storage;
 
 pub use crbk::{GateLevel, MembershipState, Snapshot};
 pub use engine::*;
 pub use model::*;
+pub use passport::*;
 pub use storage::{LibsqlStore, MemoryStore, SCHEMA, Storage};
 
 /// Failures never grant a gate and never expose upstream input or diagnostics.

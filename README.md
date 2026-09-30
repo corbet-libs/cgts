@@ -4,7 +4,7 @@ Community gatekeeping for `cvld`: run gates, collect proof metadata, expose
 headless steps, and combine rulebook decisions with the mandatory legal veto.
 Native Rust, FSL-1.1-ALv2. Development API; never publish to a registry.
 
-`Gatekeeper::{steps,run,collect,decide,withdraw}` operates within one community.
+`Gatekeeper::{steps,run,collect,check,withdraw}` operates within one community.
 `Gate` has a typed transient input; its result contains only gate, level,
 subject, provider and exclusive expiry. `VoucherGate`, `ProfileGate`,
 `BalanceGate`, `RecordGate` and `LegalGate` adapt the existing leaves. Balance

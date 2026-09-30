@@ -165,6 +165,7 @@ impl Proof {
 
 /// An in-process checked result, bound to the exact action and snapshot.
 /// Its public wire representation is available via [`Self::result`].
+#[derive(Clone)]
 pub struct CheckedGate {
     pub(crate) result: GateResult,
     pub(crate) community: String,

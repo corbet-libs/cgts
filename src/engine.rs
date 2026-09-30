@@ -1,5 +1,4 @@
 use crate::*;
-use serde::Serialize;
 use std::future::Future;
 
 /// A trusted, server-selected leaf adapter. Input is transient, never logged or
@@ -63,17 +62,6 @@ impl<S: clbs::Store + Clone, V: clbs::Verifier + Clone> LegalVeto for LegalGate<
             clbs::State::Red(_) => Err(Error::Vetoed),
         }
     }
-}
-
-/// Decision composed from the mandatory legal veto and crbk's policy engine.
-#[derive(Debug, Serialize)]
-pub struct Decision {
-    /// Both legal and rulebook checks allow this action.
-    pub allowed: bool,
-    /// Whether clbs vetoed the exact action (no order data is exposed).
-    pub legal_veto: bool,
-    /// Missing policy groups, as defined by crbk.
-    pub missing: Vec<crbk::Missing>,
 }
 
 /// Community-bound orchestration; no cryptographic or policy engine lives here.
@@ -180,7 +168,11 @@ impl<S: Storage, L: LegalVeto> Gatekeeper<S, L> {
             now: context.now,
         };
         let mut gates: Vec<_> = self.current(context).await?.into_iter().map(bind).collect();
+        let mut seen = std::collections::BTreeSet::new();
         for gate in fresh {
+            if !seen.insert((gate.result.level, gate.result.gate.clone())) {
+                return Err(Error::Scope);
+            }
             gate.in_context(context)?;
             gates.retain(|old| {
                 old.result.gate != gate.result.gate || old.result.level != gate.result.level
@@ -196,70 +188,6 @@ impl<S: Storage, L: LegalVeto> Gatekeeper<S, L> {
                 valid_until: context.now,
             }),
             gates,
-        })
-    }
-
-    /// Combine retained facts and fresh, action-bound checks through crbk.
-    /// No decision or check timestamp is persisted. clbs cannot be disabled by
-    /// rulebook switches or an empty action policy.
-    pub async fn decide(
-        &self,
-        context: Context<'_>,
-        membership: MembershipState,
-        checked: &[CheckedGate],
-    ) -> Result<Decision> {
-        context.validate(self.store.community())?;
-        match self.legal.check(context).await {
-            Err(Error::Vetoed) => {
-                return Ok(Decision {
-                    allowed: false,
-                    legal_veto: true,
-                    missing: Vec::new(),
-                });
-            }
-            result => result?,
-        }
-        let mut results = self.current(context).await?;
-        for check in checked {
-            if check.community != self.store.community()
-                || check.action != context.action
-                || check.result.subject != context.subject
-                || check.revision != context.snapshot.revision
-                || check.epoch != context.snapshot.policy_epoch
-                || check.now != context.now
-            {
-                return Err(Error::Scope);
-            }
-            results.push(check.result.clone());
-        }
-        let results: Vec<_> = results
-            .into_iter()
-            .map(|r| crbk::GateResult {
-                gate: r.gate,
-                level: r.level,
-                subject: r.subject,
-                community: Some(self.store.community().into()),
-                provider: r.provider,
-                valid_until: r.valid_until,
-                proven_at: None,
-            })
-            .collect();
-        let decision = context
-            .snapshot
-            .may(
-                crbk::Subject {
-                    id: context.subject,
-                    membership,
-                },
-                context.action,
-                &results,
-                context.now,
-            )
-            .map_err(|_| Error::Policy)?;
-        Ok(Decision {
-            allowed: decision.allowed,
-            legal_veto: false,
-            missing: decision.missing,
         })
     }
 

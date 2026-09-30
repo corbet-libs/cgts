@@ -43,9 +43,25 @@ impl Gate for VoucherGate {
     }
     async fn verify(&self, context: Context<'_>, voucher: &Self::Input) -> Result<Proof> {
         let now = context.now.try_into().map_err(|_| Error::Invalid)?;
-        cvch::verify(voucher, &self.sponsor, &context.snapshot.community, now)
-            .map_err(|_| Error::Refused)?;
-        let expiry = voucher.valid_until.try_into().map_err(|_| Error::Refused)?;
+        cvch::verify(
+            voucher,
+            &self.sponsor,
+            &context.snapshot.community,
+            context.subject.as_bytes(),
+            now,
+        )
+        .map_err(|_| Error::Refused)?;
+        let days = context
+            .snapshot
+            .content
+            .get(VOUCHER_VALIDITY_DAYS)
+            .and_then(serde_json::Value::as_i64)
+            .filter(|days| (1..=365).contains(days))
+            .ok_or(Error::Policy)?;
+        let expiry = (context.now / 86_400)
+            .checked_add(days)
+            .and_then(|days| days.checked_mul(86_400))
+            .ok_or(Error::Invalid)?;
         // cvch explicitly delegates durable first-claim-wins storage to its host.
         // Verification and receipt hashing stay entirely in the leaf.
         let claim = Claim::new("cvch", cvch::receipt_id(&voucher.id).into_bytes())?;
@@ -279,4 +295,29 @@ impl<V: cblc::accounting::AccountProofVerifier + Send + 'static> Gate for Record
         }
         Ok(Proof::transient(until))
     }
+}
+
+/// Resolved voucher gate validity, separate from the signed redemption deadline.
+pub const VOUCHER_VALIDITY_DAYS: &str = "voucher.validity_days";
+
+/// Install the voucher catalogue entry without overriding a service definition.
+pub fn define_settings(book: &mut crbk::Rulebook) -> Result<()> {
+    if !book.catalog().contains_key(VOUCHER_VALIDITY_DAYS) {
+        book.define(
+            VOUCHER_VALIDITY_DAYS,
+            crbk::Setting {
+                value_type: crbk::SettingType::Integer,
+                nullable: false,
+                default: 30.into(),
+                bounds: crbk::Bounds {
+                    min: Some(1.into()),
+                    max: Some(365.into()),
+                },
+                lowest_layer: crbk::Layer::Community,
+                kind: crbk::SettingKind::Technical,
+            },
+        )
+        .map_err(|_| Error::Policy)?;
+    }
+    Ok(())
 }

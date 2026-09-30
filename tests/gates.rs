@@ -21,7 +21,7 @@ async fn round_trip<S: Storage, L: LegalVeto>(keeper: Gatekeeper<S, L>) {
     assert_eq!(
         serde_json::to_value(checked.result()).unwrap(),
         serde_json::json!({
-            "gate":"cvch", "level":"community", "subject":"alice", "provider":"local", "valid_until":2000
+            "gate":"cvch", "level":"community", "subject":"alice", "provider":"local", "valid_until":2592000
         })
     );
     assert!(
@@ -71,7 +71,7 @@ async fn round_trip<S: Storage, L: LegalVeto>(keeper: Gatekeeper<S, L>) {
     assert!(
         keeper
             .collect(Context {
-                now: 2000,
+                now: 2_592_000,
                 ..context
             })
             .await
@@ -82,7 +82,7 @@ async fn round_trip<S: Storage, L: LegalVeto>(keeper: Gatekeeper<S, L>) {
         !keeper
             .decide(
                 Context {
-                    now: 2000,
+                    now: 2_592_000,
                     ..context
                 },
                 MembershipState::Pending,
@@ -98,7 +98,7 @@ async fn round_trip<S: Storage, L: LegalVeto>(keeper: Gatekeeper<S, L>) {
         .unwrap();
     let current = keeper.collect(context).await.unwrap();
     assert_eq!(current.len(), 1);
-    assert_eq!(current[0].valid_until, 3000);
+    assert_eq!(current[0].valid_until, 2_592_000);
     keeper.withdraw("alice", "cvch", "local").await.unwrap();
     assert!(keeper.collect(context).await.unwrap().is_empty());
     assert!(matches!(
@@ -395,4 +395,43 @@ fn gate_result_debug_does_not_expose_the_subject() {
         valid_until: 2000,
     };
     assert_eq!(format!("{result:?}"), "GateResult { .. }");
+}
+
+#[tokio::test]
+async fn voucher_is_member_bound_and_uses_coarse_policy_validity() {
+    let keeper = memory("garden");
+    let mut snapshot = snapshot("garden", "cvch");
+    snapshot
+        .content
+        .insert(gates::VOUCHER_VALIDITY_DAYS.into(), 14.into());
+    let input = voucher("garden", "bound", 1200);
+    assert!(matches!(
+        keeper
+            .run(
+                Context {
+                    subject: "interceptor",
+                    ..context(&snapshot)
+                },
+                &gate(),
+                &input
+            )
+            .await,
+        Err(Error::Refused)
+    ));
+    let checked = keeper
+        .run(context(&snapshot), &gate(), &input)
+        .await
+        .unwrap();
+    assert_eq!(checked.result().valid_until, 14 * 86400);
+    assert_eq!(
+        keeper
+            .collect(Context {
+                now: 1200,
+                ..context(&snapshot)
+            })
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }

@@ -101,19 +101,25 @@ async fn failed_result_write_rolls_back_spend_and_replacement() {
     ))
     .await
     .unwrap();
-    let strict = SCHEMA.replace("valid_until > 0", "valid_until > 0 AND valid_until < 2500");
+    let strict = SCHEMA.replace(
+        "valid_until > 0",
+        "valid_until > 0 AND valid_until <= 2592000",
+    );
     db2.migrate(&[
         crlt::Migration::new(1, "strict-gates", &strict),
         crlt::Migration::new(2, "legal", clbs::SCHEMA),
     ])
     .await
     .unwrap();
-    let snapshot = snapshot("garden", "cvch");
+    let mut snapshot = snapshot("garden", "cvch");
     let keeper = sql(&db2, "garden");
     keeper
         .run(context(&snapshot), &gate(), &voucher("garden", "old", 2000))
         .await
         .unwrap();
+    snapshot
+        .content
+        .insert(gates::VOUCHER_VALIDITY_DAYS.into(), 31.into());
     assert!(matches!(
         keeper
             .run(context(&snapshot), &gate(), &voucher("garden", "new", 3000))
@@ -122,8 +128,11 @@ async fn failed_result_write_rolls_back_spend_and_replacement() {
     ));
     assert_eq!(
         keeper.collect(context(&snapshot)).await.unwrap()[0].valid_until,
-        2000
+        2_592_000
     );
+    snapshot
+        .content
+        .insert(gates::VOUCHER_VALIDITY_DAYS.into(), 30.into());
     keeper
         .run(context(&snapshot), &gate(), &voucher("garden", "new", 2400))
         .await

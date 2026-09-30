@@ -20,6 +20,7 @@ pub fn snapshot(community: &str, gate: &str) -> Snapshot {
         issued: 100,
         content: [
             (crbk::gate_key(level, gate), true.into()),
+            (gates::VOUCHER_VALIDITY_DAYS.into(), 30.into()),
             (crbk::provider_key(level, gate, "local"), true.into()),
             (
                 crbk::action_key("enter"),
@@ -38,11 +39,13 @@ pub fn context(snapshot: &Snapshot) -> Context<'_> {
     }
 }
 pub fn voucher(community: &str, id: &str, expiry: u64) -> cvch::Voucher {
+    let binding = cvch::member_binding(&cvch::receipt_id(id), b"alice");
     cvch::Voucher {
+        member_binding: binding.clone(),
         id: id.into(),
         valid_until: expiry,
         signature: SigningKey::from_bytes(&[7; 32])
-            .sign(&cvch::issuance_bytes(id, expiry, community))
+            .sign(&cvch::issuance_bytes(id, expiry, community, &binding))
             .to_bytes()
             .to_vec(),
     }
@@ -136,4 +139,53 @@ pub fn sql(
         LegalGate::new(clbs::LibsqlStore::new(db, community).unwrap(), Authority),
     )
     .unwrap()
+}
+
+// Policy evaluation is only a test oracle here. cplc owns it in production.
+pub struct Decision {
+    pub allowed: bool,
+    pub legal_veto: bool,
+}
+pub trait TestPolicy {
+    fn decide(
+        &self,
+        context: Context<'_>,
+        membership: MembershipState,
+        checked: &[CheckedGate],
+    ) -> impl std::future::Future<Output = Result<Decision>>;
+}
+impl<S: Storage, L: LegalVeto> TestPolicy for Gatekeeper<S, L> {
+    async fn decide(
+        &self,
+        context: Context<'_>,
+        membership: MembershipState,
+        checked: &[CheckedGate],
+    ) -> Result<Decision> {
+        let checked = match self.check(context, checked.to_vec()).await {
+            Err(Error::Vetoed) => {
+                return Ok(Decision {
+                    allowed: false,
+                    legal_veto: true,
+                });
+            }
+            result => result?,
+        };
+        let gates = checked.in_context(context)?;
+        let decision = context
+            .snapshot
+            .may(
+                crbk::Subject {
+                    id: context.subject,
+                    membership,
+                },
+                context.action,
+                &gates,
+                context.now,
+            )
+            .map_err(|_| Error::Policy)?;
+        Ok(Decision {
+            allowed: decision.allowed,
+            legal_veto: false,
+        })
+    }
 }
