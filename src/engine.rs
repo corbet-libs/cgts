@@ -1,0 +1,257 @@
+use crate::*;
+use serde::Serialize;
+use std::future::Future;
+
+/// A trusted, server-selected leaf adapter. Input is transient, never logged or
+/// stored by the facade. Implementations must bind evidence to the entire context.
+pub trait Gate: Sync {
+    /// Leaf-specific request, without a facade-wide raw-data envelope.
+    type Input: Sync + ?Sized;
+    /// Headless metadata and rulebook identity.
+    fn descriptor(&self) -> Descriptor;
+    /// Delegate verification to the leaf; success attests this context only.
+    fn verify(
+        &self,
+        context: Context<'_>,
+        input: &Self::Input,
+    ) -> impl Future<Output = Result<Proof>> + Send;
+}
+
+/// Community legal veto boundary. Errors must never be converted to green.
+pub trait LegalVeto: Send + Sync {
+    /// Fixed community selected by the service.
+    fn community(&self) -> &str;
+    /// Check this exact action without recording a request.
+    fn check(&self, context: Context<'_>) -> impl Future<Output = Result<()>> + Send;
+}
+
+/// Thin adapter over clbs, with shared cloneable stores and verifier configuration.
+/// Administration uses clbs directly; this adapter cannot create legal orders.
+pub struct LegalGate<S, V> {
+    store: S,
+    verifier: V,
+}
+
+impl<S: clbs::Store, V: clbs::Verifier> LegalGate<S, V> {
+    /// Bind the leaf's storage and authority verifier.
+    pub fn new(store: S, verifier: V) -> Self {
+        Self { store, verifier }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct At(i64);
+impl clbs::Clock for At {
+    fn now(&self) -> clbs::Result<i64> {
+        Ok(self.0)
+    }
+}
+
+impl<S: clbs::Store + Clone, V: clbs::Verifier + Clone> LegalVeto for LegalGate<S, V> {
+    fn community(&self) -> &str {
+        self.store.community()
+    }
+    async fn check(&self, context: Context<'_>) -> Result<()> {
+        context.validate(self.community())?;
+        let gate = clbs::Gate::new(self.store.clone(), self.verifier.clone(), At(context.now));
+        match gate
+            .check_action(context.subject, context.action)
+            .await
+            .map_err(|_| Error::Legal)?
+        {
+            clbs::State::Green => Ok(()),
+            clbs::State::Red(_) => Err(Error::Vetoed),
+        }
+    }
+}
+
+/// Decision composed from the mandatory legal veto and crbk's policy engine.
+#[derive(Debug, Serialize)]
+pub struct Decision {
+    /// Both legal and rulebook checks allow this action.
+    pub allowed: bool,
+    /// Whether clbs vetoed the exact action (no order data is exposed).
+    pub legal_veto: bool,
+    /// Missing policy groups, as defined by crbk.
+    pub missing: Vec<crbk::Missing>,
+}
+
+/// Community-bound orchestration; no cryptographic or policy engine lives here.
+pub struct Gatekeeper<S, L> {
+    store: S,
+    legal: L,
+}
+
+impl<S: Storage, L: LegalVeto> Gatekeeper<S, L> {
+    /// Reject mismatched community capabilities before any gate can run.
+    pub fn new(store: S, legal: L) -> Result<Self> {
+        identifier(store.community())?;
+        if store.community() != legal.community() {
+            return Err(Error::Scope);
+        }
+        Ok(Self { store, legal })
+    }
+
+    /// Only enabled community gates/providers appear in the lobby.
+    pub async fn steps(
+        &self,
+        context: Context<'_>,
+        registered: &[Descriptor],
+    ) -> Result<Vec<Descriptor>> {
+        self.preflight(context).await?;
+        let mut steps = Vec::new();
+        for descriptor in registered {
+            descriptor.validate()?;
+            if descriptor.level == GateLevel::Community && descriptor.enabled(context.snapshot) {
+                steps.push(descriptor.clone());
+            }
+        }
+        Ok(steps)
+    }
+
+    /// Run a leaf after switch/veto checks, then atomically commit any nullifier
+    /// and retained result. Failed evidence does not erase an earlier valid fact.
+    pub async fn run<G: Gate>(
+        &self,
+        context: Context<'_>,
+        gate: &G,
+        input: &G::Input,
+    ) -> Result<CheckedGate> {
+        self.preflight(context).await?;
+        let descriptor = gate.descriptor();
+        descriptor.validate()?;
+        if descriptor.level != GateLevel::Community {
+            return Err(Error::Scope);
+        }
+        if !descriptor.enabled(context.snapshot) {
+            return Err(Error::Disabled);
+        }
+        let proof = gate.verify(context, input).await?;
+        let result = GateResult {
+            gate: descriptor.gate,
+            level: descriptor.level,
+            subject: context.subject.into(),
+            provider: descriptor.provider,
+            valid_until: proof.valid_until,
+        };
+        result.validate()?;
+        if result.valid_until <= context.now {
+            return Err(Error::Refused);
+        }
+        // Recheck mutable legal state after a potentially slow provider operation.
+        self.legal.check(context).await?;
+        self.store
+            .commit(proof.retain.then_some(&result), proof.claim.as_ref())
+            .await?;
+        Ok(CheckedGate {
+            result,
+            community: self.store.community().into(),
+            action: context.action.into(),
+            revision: context.snapshot.revision,
+            epoch: context.snapshot.policy_epoch,
+            now: context.now,
+        })
+    }
+
+    /// List retained, currently enabled and unexpired results for this subject.
+    /// Transient profile checks and balance spends never appear here.
+    pub async fn collect(&self, context: Context<'_>) -> Result<Vec<GateResult>> {
+        self.preflight(context).await?;
+        self.current(context).await
+    }
+
+    /// Combine retained facts and fresh, action-bound checks through crbk.
+    /// No decision or check timestamp is persisted. clbs cannot be disabled by
+    /// rulebook switches or an empty action policy.
+    pub async fn decide(
+        &self,
+        context: Context<'_>,
+        membership: MembershipState,
+        checked: &[CheckedGate],
+    ) -> Result<Decision> {
+        context.validate(self.store.community())?;
+        match self.legal.check(context).await {
+            Err(Error::Vetoed) => {
+                return Ok(Decision {
+                    allowed: false,
+                    legal_veto: true,
+                    missing: Vec::new(),
+                });
+            }
+            result => result?,
+        }
+        let mut results = self.current(context).await?;
+        for check in checked {
+            if check.community != self.store.community()
+                || check.action != context.action
+                || check.result.subject != context.subject
+                || check.revision != context.snapshot.revision
+                || check.epoch != context.snapshot.policy_epoch
+                || check.now != context.now
+            {
+                return Err(Error::Scope);
+            }
+            results.push(check.result.clone());
+        }
+        let results: Vec<_> = results
+            .into_iter()
+            .map(|r| crbk::GateResult {
+                gate: r.gate,
+                level: r.level,
+                subject: r.subject,
+                community: Some(self.store.community().into()),
+                provider: r.provider,
+                valid_until: r.valid_until,
+                proven_at: None,
+            })
+            .collect();
+        let decision = context
+            .snapshot
+            .may(
+                crbk::Subject {
+                    id: context.subject,
+                    membership,
+                },
+                context.action,
+                &results,
+                context.now,
+            )
+            .map_err(|_| Error::Policy)?;
+        Ok(Decision {
+            allowed: decision.allowed,
+            legal_veto: false,
+            missing: decision.missing,
+        })
+    }
+
+    /// Remove one reusable fact after a trusted provider revocation. Authorization
+    /// belongs to the service. Single-use tombstones are deliberately retained.
+    pub async fn withdraw(&self, subject: &str, gate: &str, provider: &str) -> Result<()> {
+        self.store.remove(subject, gate, provider).await
+    }
+
+    async fn preflight(&self, context: Context<'_>) -> Result<()> {
+        context.validate(self.store.community())?;
+        self.legal.check(context).await
+    }
+
+    async fn current(&self, context: Context<'_>) -> Result<Vec<GateResult>> {
+        let mut current = Vec::new();
+        for result in self.store.load(context.subject).await? {
+            result.validate().map_err(|_| Error::Storage)?;
+            if result.subject != context.subject || result.level != GateLevel::Community {
+                return Err(Error::Storage);
+            }
+            let descriptor = Descriptor {
+                gate: result.gate.clone(),
+                provider: result.provider.clone(),
+                level: result.level,
+                steps: Vec::new(),
+            };
+            if result.valid_until > context.now && descriptor.enabled(context.snapshot) {
+                current.push(result);
+            }
+        }
+        Ok(current)
+    }
+}

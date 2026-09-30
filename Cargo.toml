@@ -8,9 +8,33 @@ license = "FSL-1.1-ALv2"
 repository = "https://github.com/corbet-libs/cgts"
 readme = "README.md"
 publish = false
-include = ["Cargo.toml", "src/**", "README.md", "LICENSE.md"]
+include = ["Cargo.toml", "src/**", "docs/**", "README.md", "LICENSE.md"]
 
 [dependencies]
+crlt = { git = "https://github.com/corbet-foss/crlt", rev = "6b94dacd7fa04aa8847c62c6471a1fc5c0f6c9dc" }
+crbk = { git = "https://github.com/corbet-foss/crbk", rev = "0eff64915dbeab0a725a8b1c0ad9061ae7d83976" }
+clbs = { git = "https://github.com/corbet-foss/clbs", rev = "2eeefb351484aadf430cd12083e0f198cde6a5b2" }
+cgrd = { git = "https://github.com/corbet-foss/cgrd", rev = "ca8783f3bb114d055987fd44d86628197ecc845d", default-features = false }
+cvch = { git = "https://github.com/corbet-foss/cvch", rev = "bb2c9a84b1a5cae2440a73caee37cea96dc59680" }
+cblc = { git = "https://github.com/corbet-libs/cblc", rev = "ee7a6e9e769d5067ab374868facc88e740ee1aca" }
+ed25519-dalek = "2.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+csgn = { git = "https://github.com/corbet-foss/csgn", rev = "f995e99af75f456a66de991adc4a731ca859498c", default-features = false }
+data-encoding = "2.9"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+# Upstream balance manifests still follow main. Freeze those transitive leaves.
+[patch."https://github.com/corbet-foss/cssr"]
+cssr = { git = "https://github.com/corbet-foss/cssr.git", rev = "099701e90b1829baed56f547e65d4e4f210f3016" }
+[patch."https://github.com/corbet-foss/cvfy"]
+cvfy = { git = "https://github.com/corbet-foss/cvfy.git", rev = "f121436a43a1fe6cc3e66552c0e681024566dfeb" }
+[patch."https://github.com/corbet-foss/czkp"]
+czkp = { git = "https://github.com/corbet-foss/czkp.git", rev = "2fdd165f8ca4732bad20e2726503a7e927b8054d" }
 
 [lints.rust]
 unsafe_code = "forbid"
