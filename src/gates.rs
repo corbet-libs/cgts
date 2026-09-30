@@ -229,3 +229,87 @@ pub mod development {
         result
     }
 }
+
+/// Public-record proof supplied transiently to the balance leaf. Below-quorum
+/// records still require a proof; no raw counters are accepted or retained.
+pub struct RecordProof {
+    /// Opaque current-state binding and optional relative shares.
+    pub record: cblc::extensions::PublicRecord,
+    /// Complete extension proof, checked only by the configured leaf verifier.
+    pub proof: Vec<u8>,
+}
+
+/// cblc's required fresh record gate for forum listing and first contact.
+/// The service selects the ledger, authenticated owner and expected challenge;
+/// request data cannot select them. Run inside a Tokio runtime.
+pub struct RecordGate<'a, V: cblc::accounting::AccountProofVerifier> {
+    /// Configured provider.
+    pub provider: &'a str,
+    /// Community corresponding to the configured issuer ledger.
+    pub community: &'a str,
+    /// Authenticated pseudonym corresponding to `owner`.
+    pub subject: &'a str,
+    /// Exact service action corresponding to `expected.purpose`.
+    pub action: &'a str,
+    /// Community accounting owner, selected independently of member input.
+    pub owner: [u8; 32],
+    /// Relying-service challenge, intended use and exclusive expiry.
+    pub expected: cblc::extensions::RecordContext,
+    /// Existing cblc issuer with a complete extension verifier configured.
+    pub ledger: std::sync::Arc<std::sync::Mutex<cblc::accounting_ledger::AccountLedger<V>>>,
+    /// Trusted clock, also checked after the blocking proof operation.
+    pub clock: std::sync::Arc<dyn clbs::Clock>,
+}
+
+impl<V: cblc::accounting::AccountProofVerifier + Send + 'static> Gate for RecordGate<'_, V> {
+    type Input = RecordProof;
+    fn descriptor(&self) -> Descriptor {
+        description(
+            "cblc",
+            self.provider,
+            "Prove the current balance record for this action and challenge.",
+            "cblc.RecordProof",
+        )
+    }
+    async fn verify(&self, context: Context<'_>, input: &Self::Input) -> Result<Proof> {
+        if context.snapshot.community != self.community
+            || context.subject != self.subject
+            || context.action != self.action
+            || self.clock.now().map_err(|_| Error::Invalid)? != context.now
+        {
+            return Err(Error::Scope);
+        }
+        // Cap transport-level copies; cblc enforces its configured proof bound too.
+        if input.proof.is_empty() || input.proof.len() > 1024 * 1024 {
+            return Err(Error::Refused);
+        }
+        let ledger = self.ledger.clone();
+        let record = input.record.clone();
+        let proof = input.proof.clone();
+        let expected = self.expected.clone();
+        let owner = self.owner;
+        let clock = self.clock.clone();
+        let until = i64::try_from(expected.expires_at).map_err(|_| Error::Invalid)?;
+        tokio::task::spawn_blocking(move || {
+            ledger
+                .lock()
+                .map_err(|_| Error::Storage)?
+                .check_record(owner, &expected, &record, &proof, || {
+                    clock
+                        .now()
+                        .ok()
+                        .and_then(|v| v.try_into().ok())
+                        .unwrap_or(u64::MAX)
+                })
+                .map_err(|_| Error::Refused)?;
+            Ok::<(), Error>(())
+        })
+        .await
+        .map_err(|_| Error::Refused)??;
+        let completed = self.clock.now().map_err(|_| Error::Invalid)?;
+        if completed < context.now || completed >= until {
+            return Err(Error::Refused);
+        }
+        Ok(Proof::transient(until))
+    }
+}

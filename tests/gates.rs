@@ -1,3 +1,4 @@
+//! Signed voucher, rulebook and mandatory legal-veto integration tests.
 mod common;
 use cgts::*;
 use common::*;

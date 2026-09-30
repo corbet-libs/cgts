@@ -7,7 +7,7 @@ Native Rust, FSL-1.1-ALv2. Development API; never publish to a registry.
 `Gatekeeper::{steps,run,collect,decide,withdraw}` operates within one community.
 `Gate` has a typed transient input; its result contains only gate, level,
 subject, provider and exclusive expiry. `VoucherGate`, `ProfileGate`,
-`BalanceGate` and `LegalGate` adapt the existing leaves. The global toy test gate
+`BalanceGate`, `RecordGate` and `LegalGate` adapt the existing leaves. The global toy test gate
 exists only in builds with debug assertions. See [the implemented contract](docs/CONTRACT.md).
 
 The service supplies an authenticated active `crbk::Snapshot`, subject, action,
@@ -29,7 +29,7 @@ and contract before integration.
 | [clbs](https://github.com/corbet-foss/clbs) | Existing community legal-order and self-ban semantics; always consult its exact-action API. |
 | [cgrd](https://github.com/corbet-foss/cgrd) | Existing signed person/profile validation and pin checks. Disable its optional storage; do not retain profiles. |
 | [cvch](https://github.com/corbet-foss/cvch) | Existing voucher signature, scope, expiry and receipt computation. Add only its explicitly host-owned atomic storage. This revision has no docs/CONTRACT.md; use its README and documented Rust API. |
-| [cblc](https://github.com/corbet-libs/cblc) | Available under corbet-libs, FSL, rather than corbet-foss. Verify its signed extended change-spend acceptance without duplicating accounting or proof logic. It composes LGPL [cssr](https://github.com/corbet-foss/cssr), [cvfy](https://github.com/corbet-foss/cvfy) and [czkp](https://github.com/corbet-foss/czkp). |
+| [cblc](https://github.com/corbet-libs/cblc) | Available under corbet-libs, FSL, rather than corbet-foss. Verify signed extended change-spend acceptances and run fresh forum-listing/first-contact record checks without duplicating accounting or proof logic. It composes LGPL [cssr](https://github.com/corbet-foss/cssr), [cvfy](https://github.com/corbet-foss/cvfy) and [czkp](https://github.com/corbet-foss/czkp). |
 | [Cedar](https://github.com/cedar-policy/cedar) 4.13 / crates.io `gate` 0.6.3 | Cedar is a maintained general authorization language, broader than this facade and redundant with crbk. The `gate` crate is a game library. Neither replaces domain leaf composition. |
 | [Serde](https://github.com/serde-rs/serde), serde_json, thiserror | Maintained encoding and redacted errors. No custom serialization parser. |
 | [async-trait](https://github.com/dtolnay/async-trait) | Considered; native Rust future-returning traits suffice, avoiding allocation/dynamic dispatch. |
@@ -38,8 +38,10 @@ and contract before integration.
 External dependencies are MIT, Apache-2.0 or BSD-3-Clause; sibling leaves use
 LGPL with their linking exception. No GPL-only or AGPL-only dependency is added.
 Test-only csgn parses cgrd's frozen public signing vector at its matching pinned
-wire revision. Tokio/tempfile support real database tests; data-encoding builds
-signed balance fixtures. CI retains Cargo.lock for reproducibility.
+wire revision. Tokio runs synchronous cblc verification on a blocking thread;
+tempfile and data-encoding support real database and signed balance tests.
+Cargo.lock pins transitive upstream branch dependencies, including cssr, cvfy
+and czkp. CI uses --locked and retains the lockfile for reproducibility.
 
 ## Storage and validation
 
@@ -59,8 +61,9 @@ committed or configured in public CI.
 
 cblc's extension proof circuit/holder remains upstream work; its own contract
 forbids production activation without it. Signed acceptance tests exercise
-binding and replay protection, not hidden balance mathematics. Other balance
-predicates need leaf APIs. Field-change execution must coordinate consumption
+binding and replay protection, not hidden balance mathematics. Fresh record
+checks delegate to cblc, including below-quorum proof requirements. Additional
+balance predicates need leaf APIs. Field-change execution must coordinate consumption
 with cpns. The default cgrd contact detector fails closed where required; a
 custom detector adapter is not yet exposed here. Services own authenticated
 snapshots, fresh clocks and trust roots. See the contract for precise limits.

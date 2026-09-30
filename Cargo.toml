@@ -16,11 +16,12 @@ crbk = { git = "https://github.com/corbet-foss/crbk", rev = "0eff64915dbeab0a725
 clbs = { git = "https://github.com/corbet-foss/clbs", rev = "2eeefb351484aadf430cd12083e0f198cde6a5b2" }
 cgrd = { git = "https://github.com/corbet-foss/cgrd", rev = "ca8783f3bb114d055987fd44d86628197ecc845d", default-features = false }
 cvch = { git = "https://github.com/corbet-foss/cvch", rev = "bb2c9a84b1a5cae2440a73caee37cea96dc59680" }
-cblc = { git = "https://github.com/corbet-libs/cblc", rev = "ee7a6e9e769d5067ab374868facc88e740ee1aca" }
+cblc = { git = "https://github.com/corbet-libs/cblc", rev = "135333e0fae497be4478b3eb9f5d10f8a8b30c8b" }
 ed25519-dalek = "2.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+tokio = { version = "1", features = ["rt"] }
 
 [dev-dependencies]
 csgn = { git = "https://github.com/corbet-foss/csgn", rev = "f995e99af75f456a66de991adc4a731ca859498c", default-features = false }

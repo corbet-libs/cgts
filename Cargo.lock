@@ -244,7 +244,7 @@ dependencies = [
 [[package]]
 name = "cblc"
 version = "0.0.0"
-source = "git+https://github.com/corbet-libs/cblc?rev=ee7a6e9e769d5067ab374868facc88e740ee1aca#ee7a6e9e769d5067ab374868facc88e740ee1aca"
+source = "git+https://github.com/corbet-libs/cblc?rev=135333e0fae497be4478b3eb9f5d10f8a8b30c8b#135333e0fae497be4478b3eb9f5d10f8a8b30c8b"
 dependencies = [
  "crlt 0.0.0 (git+https://github.com/corbet-foss/crlt?rev=6b94dacd7fa04aa8847c62c6471a1fc5c0f6c9dc)",
  "cssr",

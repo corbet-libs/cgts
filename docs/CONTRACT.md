@@ -76,6 +76,14 @@ explicit withdrawal. Callers control endpoint authorization.
 - `LegalGate`: delegates each exact-action check to clbs with the caller's clock.
   Orders, self-bans, authority verification and administration remain in clbs.
   No cached green legal result can bypass a later order.
+- `RecordGate`: calls cblc's `check_record` on a blocking Tokio thread for first
+  contact or forum listing. The service independently binds the ledger, owner,
+  action, intended use, challenge and expiry. cblc verifies current commitment,
+  consumed punishment inbox and the full record proof; below-quorum records also
+  need a proof. The facade retains neither shares nor proofs. Missing extension
+  support and stale, mismatched or invalid records fail closed. The trusted clock
+  is checked before and after verification. Results are transient and expire with
+  the relying-service challenge. Challenge freshness is a service responsibility.
 - `gates::development`: global always-pass toy gate and headless description,
   guarded by `cfg(debug_assertions)`. Absent in normal release builds, with no
   Cargo feature to enable it there. It is never accepted by the community runner.
@@ -121,8 +129,9 @@ No Cargo runs on the workstation. No registry publication.
 The cblc extension contract explicitly requires a complete extension circuit
 and holder implementation before activation. This adapter verifies the issuer's
 signed assertion; tests do not claim to prove hidden balance constraints.
-Generic introduction-balance predicates and punishment/public-record gates are
-not exposed by a ready leaf gate API and remain future adapters. No substitute
+The fresh forum-listing/first-contact record API is integrated from cblc's
+CI-green main revision 135333e0. Additional introduction-balance predicates and
+punishment execution stay in cblc and its complete extension relation. No substitute
 balance arithmetic, proof verifier or permissive default is implemented here.
 
 cvch has no docs/CONTRACT.md at the pinned revision; its README and public Rust

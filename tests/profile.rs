@@ -1,3 +1,4 @@
+//! Verification of the upstream signed profile fixture through the facade.
 mod common;
 use cgts::*;
 use common::*;

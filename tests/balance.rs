@@ -1,3 +1,4 @@
+//! Real issuer signatures and fail-closed balance-leaf integration.
 mod common;
 use cblc::{accounting::*, extensions::*};
 use cgts::*;
@@ -232,4 +233,95 @@ async fn wrong_effect_subject_owner_scope_binding_expiry_and_signature_fail() {
     ));
     // None of those rejections burns the authentic acceptance.
     keeper.run(context(&snapshot), &gate, &input).await.unwrap();
+}
+
+#[tokio::test]
+async fn record_gate_refuses_without_the_complete_extension_relation() {
+    use cblc::accounting_ledger::{AccountLedger, AccountLedgerPolicy};
+    use cblc::accounting_service::{ProcessAccountVerifier, ProcessVerifierConfig};
+    use std::sync::{Arc, Mutex};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("record-ledger.db");
+    let ledger = tokio::task::spawn_blocking(move || {
+        // The real process adapter is not invoked: a legacy ledger must refuse
+        // record proofs before any worker could treat them as ordinary v2 proofs.
+        let verifier = ProcessAccountVerifier::new(ProcessVerifierConfig {
+            node: "/unconfigured/node".into(),
+            script: "/unconfigured/worker.mjs".into(),
+            artifact_config: "/unconfigured/artifacts.json".into(),
+            scope: scope(),
+            timeout: std::time::Duration::from_secs(1),
+            maximum_parallel: 1,
+            max_proof_bytes: 1024,
+            node_heap_megabytes: 64,
+        })
+        .unwrap();
+        AccountLedger::open(
+            path,
+            cblc::admission::AdmissionTrust {
+                community_id: "garden".into(),
+                policy_digest: B64.encode(&[1; 32]),
+                issuer_public_key: SigningKey::from_bytes(&[10; 32]).verifying_key().to_bytes(),
+            },
+            AccountLedgerPolicy {
+                account: spend().request.statement.policy,
+                max_authorization_seconds: 100,
+                max_proof_bytes: 1024,
+                checkpoint_period_seconds: 1000,
+            },
+            verifier,
+            SigningKey::from_bytes(&[9; 32]),
+        )
+        .unwrap()
+    })
+    .await
+    .unwrap();
+    let mut gate = gates::RecordGate {
+        provider: "local",
+        community: "garden",
+        subject: "alice",
+        action: "enter",
+        owner: [2; 32],
+        expected: RecordContext {
+            purpose: RecordUse::ForumListing,
+            challenge: [1; 32],
+            expires_at: 1150,
+        },
+        ledger: Arc::new(Mutex::new(ledger)),
+        clock: Arc::new(Clock),
+    };
+    let snapshot = snapshot("garden", "cblc");
+    let keeper = memory("garden");
+    let mut input = gates::RecordProof {
+        record: PublicRecord {
+            context: gate.expected.clone(),
+            community: [1; 32],
+            owner: [2; 32],
+            version: 1,
+            state: [3; 32],
+            inbox: Inbox::default(),
+            shares: None,
+        },
+        proof: vec![1, 2, 3],
+    };
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &input).await,
+        Err(Error::Refused)
+    ));
+    input.record.context.purpose = RecordUse::FirstContact;
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &input).await,
+        Err(Error::Refused)
+    ));
+    input.proof.clear();
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &input).await,
+        Err(Error::Refused)
+    ));
+    gate.subject = "bob";
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &input).await,
+        Err(Error::Scope)
+    ));
+    assert!(keeper.collect(context(&snapshot)).await.unwrap().is_empty());
 }

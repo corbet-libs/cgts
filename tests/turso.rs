@@ -1,3 +1,4 @@
+//! Optional real Turso round trip; public CI supplies no credentials.
 mod common;
 use cgts::*;
 use common::*;
