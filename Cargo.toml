@@ -18,7 +18,7 @@ clbs = { git = "https://github.com/corbet-foss/clbs", rev = "2eeefb351484aadf430
 cgrd = { git = "https://github.com/corbet-foss/cgrd", rev = "947969cd38166f75914aa09256a6d2523990e0e4", default-features = false }
 cvch = { git = "https://github.com/corbet-foss/cvch", rev = "bf0a5dede0af0680e6c74720cbb51f1c10a812e9" }
 cblc = { git = "https://github.com/corbet-libs/cblc", rev = "8906e19d0841c0930bffabd3d88fc3fc6524b5a3" }
-cpsd = { git = "https://github.com/corbet-foss/cpsd", rev = "5b2d5d9970d4beae171d85e478d06ba0b29e1992" }
+cpsd = { git = "https://github.com/corbet-foss/cpsd", rev = "b60f2bbff04dbe0a93cb41992006b06dafc798c3" }
 rand = "0.8"
 ed25519-dalek = "2.2"
 serde = { version = "1", features = ["derive"] }
