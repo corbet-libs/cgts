@@ -348,3 +348,48 @@ fn development_gate_has_global_metadata_and_headless_step() {
     assert_eq!(gates::development::descriptor().steps.len(), 1);
     assert!(gates::development::global("holder", 200, 200).is_err());
 }
+
+#[tokio::test]
+async fn checked_collection_rejects_other_action_time_revision_epoch_and_subject() {
+    let keeper = memory("garden");
+    let original = snapshot("garden", "cvch");
+    let ctx = context(&original);
+    let checked = keeper.check(ctx, Vec::new()).await.unwrap();
+    assert!(checked.in_context(ctx).unwrap().is_empty());
+    for changed in [
+        Context {
+            action: "other",
+            ..ctx
+        },
+        Context {
+            now: ctx.now + 1,
+            ..ctx
+        },
+        Context {
+            subject: "bob",
+            ..ctx
+        },
+    ] {
+        assert!(matches!(checked.in_context(changed), Err(Error::Scope)));
+    }
+    let mut other = original.clone();
+    other.revision += 1;
+    assert!(
+        checked
+            .in_context(Context {
+                snapshot: &other,
+                ..ctx
+            })
+            .is_err()
+    );
+    other = original.clone();
+    other.policy_epoch += 1;
+    assert!(
+        checked
+            .in_context(Context {
+                snapshot: &other,
+                ..ctx
+            })
+            .is_err()
+    );
+}

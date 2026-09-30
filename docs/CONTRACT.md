@@ -144,3 +144,13 @@ same wire revision as cgrd until upstream coordinates the upgrade. Qualified
 legal-authority/passkey verification, snapshot authenticity/freshness, transport
 limits, trust-root distribution and check/action concurrency belong to services.
 Checks are point-in-time, not transactions spanning leaf state and external actions.
+
+## Policy composition witness
+
+`check` collects retained facts and fresh `CheckedGate` values after the mandatory
+legal check, returning opaque `CheckedGates`. Its `in_context` method validates
+community, pseudonym, action, publication revision, effective epoch and exact
+transient check time, including for an empty collection. cplc consumes this
+capability; serialized gate metadata cannot construct it. This method performs
+no rulebook decision. Exact transient time is needed to bind one operation and
+is never persisted or signed.

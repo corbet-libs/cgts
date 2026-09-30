@@ -180,3 +180,54 @@ impl CheckedGate {
         &self.result
     }
 }
+
+impl CheckedGate {
+    /// Validate the full check binding before supplying metadata to cplc.
+    pub fn in_context(&self, context: Context<'_>) -> Result<&GateResult> {
+        context.validate(&self.community)?;
+        if self.action != context.action
+            || self.result.subject != context.subject
+            || self.revision != context.snapshot.revision
+            || self.epoch != context.snapshot.policy_epoch
+            || self.now != context.now
+        {
+            return Err(Error::Scope);
+        }
+        Ok(&self.result)
+    }
+}
+
+/// Complete checked gate collection, including the mandatory legal veto.
+/// The empty collection is also produced only after a live legal check.
+///
+/// ```compile_fail
+/// let raw: Vec<cgts::GateResult> = Vec::new();
+/// let checked: cgts::CheckedGates = raw.into();
+/// ```
+pub struct CheckedGates {
+    pub(crate) context: CheckedGate,
+    pub(crate) gates: Vec<CheckedGate>,
+}
+
+impl CheckedGates {
+    /// Validate every action, subject, time, revision and effective epoch binding.
+    pub fn in_context(&self, context: Context<'_>) -> Result<Vec<crbk::GateResult>> {
+        self.context.in_context(context)?;
+        self.gates
+            .iter()
+            .map(|gate| {
+                let result = gate.in_context(context)?;
+                Ok(crbk::GateResult {
+                    gate: result.gate.clone(),
+                    level: result.level,
+                    subject: result.subject.clone(),
+                    provider: result.provider.clone(),
+                    community: (result.level == GateLevel::Community)
+                        .then(|| context.snapshot.community.clone()),
+                    valid_until: result.valid_until,
+                    proven_at: None,
+                })
+            })
+            .collect()
+    }
+}

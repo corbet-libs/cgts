@@ -160,6 +160,42 @@ impl<S: Storage, L: LegalVeto> Gatekeeper<S, L> {
         self.current(context).await
     }
 
+    /// Collect checked evidence for cplc without making an admission decision.
+    /// Legal state is checked even when there are no required gates.
+    pub async fn check(
+        &self,
+        context: Context<'_>,
+        fresh: Vec<CheckedGate>,
+    ) -> Result<CheckedGates> {
+        self.preflight(context).await?;
+        let bind = |result| CheckedGate {
+            result,
+            community: self.store.community().into(),
+            action: context.action.into(),
+            revision: context.snapshot.revision,
+            epoch: context.snapshot.policy_epoch,
+            now: context.now,
+        };
+        let mut gates: Vec<_> = self.current(context).await?.into_iter().map(bind).collect();
+        for gate in fresh {
+            gate.in_context(context)?;
+            gates.retain(|old| {
+                old.result.gate != gate.result.gate || old.result.level != gate.result.level
+            });
+            gates.push(gate);
+        }
+        Ok(CheckedGates {
+            context: bind(GateResult {
+                gate: "legal-context".into(),
+                level: GateLevel::Community,
+                subject: context.subject.into(),
+                provider: "clbs".into(),
+                valid_until: context.now,
+            }),
+            gates,
+        })
+    }
+
     /// Combine retained facts and fresh, action-bound checks through crbk.
     /// No decision or check timestamp is persisted. clbs cannot be disabled by
     /// rulebook switches or an empty action policy.
