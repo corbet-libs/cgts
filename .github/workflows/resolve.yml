@@ -8,6 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - run: rm Cargo.lock
       - run: cargo metadata --format-version 1 > dependency-metadata.json
       - run: node .github/check-pins.mjs dependency-metadata.json
       - uses: actions/upload-artifact@v4
