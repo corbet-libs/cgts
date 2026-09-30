@@ -26,6 +26,17 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked --no-fail-fast
       - run: cargo test --locked --release --no-fail-fast
+      - name: Prove the development gate is absent from release builds
+        run: |
+          mkdir -p examples
+          cp .ci/development_gate_probe.rs examples/development_gate_probe.rs
+          cargo check --locked --example development_gate_probe
+          if cargo check --locked --release --example development_gate_probe > release-probe.log 2>&1; then
+            echo "The development gate must not compile in release builds"
+            exit 1
+          fi
+          cat release-probe.log
+          grep -F 'could not find `development` in `gates`' release-probe.log
       - name: Retain resolved dependency identity
         if: always()
         uses: actions/upload-artifact@v4
