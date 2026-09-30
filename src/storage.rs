@@ -36,6 +36,9 @@ pub trait Storage: Send + Sync {
 fn validate(result: Option<&GateResult>) -> Result<()> {
     if let Some(result) = result {
         result.validate()?;
+        if result.valid_until % 86_400 != 0 {
+            return Err(Error::Invalid);
+        }
         if result.level != GateLevel::Community {
             return Err(Error::Scope);
         }
@@ -189,7 +192,7 @@ impl Storage for LibsqlStore {
                     level: GateLevel::Community,
                     subject: subject.into(),
                 };
-                result.validate().map_err(|_| Error::Storage)?;
+                validate(Some(&result)).map_err(|_| Error::Storage)?;
                 Ok(result)
             })
             .collect()

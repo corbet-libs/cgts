@@ -123,7 +123,11 @@ impl<S: Storage, L: LegalVeto> Gatekeeper<S, L> {
             level: descriptor.level,
             subject: context.subject.into(),
             provider: descriptor.provider,
-            valid_until: proof.valid_until,
+            valid_until: if proof.retain {
+                proof.valid_until / 86_400 * 86_400
+            } else {
+                proof.valid_until
+            },
         };
         result.validate()?;
         if result.valid_until <= context.now {

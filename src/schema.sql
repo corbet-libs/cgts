@@ -3,7 +3,7 @@ CREATE TABLE cgts_results (
     subject TEXT NOT NULL,
     gate TEXT NOT NULL,
     provider TEXT NOT NULL,
-    valid_until INTEGER NOT NULL CHECK (valid_until > 0),
+    valid_until INTEGER NOT NULL CHECK (valid_until > 0 AND valid_until % 86400 = 0),
     PRIMARY KEY (community_id, subject, gate, provider)
 ) WITHOUT ROWID;
 CREATE TABLE cgts_spent (

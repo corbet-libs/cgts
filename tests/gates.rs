@@ -460,3 +460,36 @@ async fn checked_evidence_cannot_hide_changed_settings_behind_the_same_revision(
         Err(Error::Scope)
     );
 }
+
+#[tokio::test]
+async fn every_retained_provider_expiry_is_rounded_down_to_a_day() {
+    struct Provider(i64);
+    impl Gate for Provider {
+        type Input = ();
+        fn descriptor(&self) -> Descriptor {
+            Descriptor {
+                gate: "day".into(),
+                provider: "local".into(),
+                level: GateLevel::Community,
+                steps: vec![],
+            }
+        }
+        async fn verify(&self, _: Context<'_>, _: &()) -> Result<Proof> {
+            Ok(Proof::retained(self.0))
+        }
+    }
+    let keeper = memory("garden");
+    let snapshot = snapshot("garden", "day");
+    let context = context(&snapshot);
+    let checked = keeper.run(context, &Provider(172923), &()).await.unwrap();
+    assert_eq!(checked.result().valid_until, 172800);
+    assert_eq!(
+        keeper.collect(context).await.unwrap()[0].valid_until,
+        172800
+    );
+    assert!(keeper.run(context, &Provider(2000), &()).await.is_err());
+    assert_eq!(
+        keeper.collect(context).await.unwrap()[0].valid_until,
+        172800
+    );
+}

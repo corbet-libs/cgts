@@ -111,3 +111,9 @@ unspent token nor a caller-built signed receipt can alter a pin. Balance and
 record adapters themselves also refuse, even when called outside Gatekeeper.
 Positive extension-spend/restart tests cannot honestly pass until cblc's private
 extension circuit is proven; the current tests require refusal for all contexts.
+
+All retained provider expiries are rounded down to UTC days before constructing
+CheckedGate or committing a claim. Evidence that cannot reach the next day cannot
+be retained. Both store adapters and the SQL constraint reject precise retained
+expiries. Transient profile checks keep second precision because they certify the
+current signed profile at the verification instant and are never persisted.

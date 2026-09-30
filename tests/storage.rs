@@ -162,7 +162,7 @@ async fn missing_schema_legal_failure_and_corrupt_results_never_allow() {
         Err(Error::Legal)
     ));
     migrate(&db).await;
-    db.community("garden").unwrap().execute("INSERT INTO cgts_results (subject, gate, provider, valid_until) VALUES (?1, ?2, ?3, ?4)", crlt::params!["alice", "bad/gate", "local", 2000i64]).await.unwrap();
+    db.community("garden").unwrap().execute("INSERT INTO cgts_results (subject, gate, provider, valid_until) VALUES (?1, ?2, ?3, ?4)", crlt::params!["alice", "bad/gate", "local", 86400i64]).await.unwrap();
     assert!(matches!(
         sql(&db, "garden").collect(context(&snapshot)).await,
         Err(Error::Storage)
@@ -177,7 +177,7 @@ async fn memory_claim_and_result_commit_share_the_same_contract() {
         level: GateLevel::Community,
         subject: "alice".into(),
         provider: "local".into(),
-        valid_until: 2000,
+        valid_until: 86400,
     };
     let claim = Claim::new("cvch", vec![1; 32]).unwrap();
     let invalid = GateResult {
@@ -185,9 +185,14 @@ async fn memory_claim_and_result_commit_share_the_same_contract() {
         ..result.clone()
     };
     assert!(store.commit(Some(&invalid), Some(&claim)).await.is_err());
+    let precise = GateResult {
+        valid_until: 86401,
+        ..result.clone()
+    };
+    assert!(store.commit(Some(&precise), Some(&claim)).await.is_err());
     store.commit(Some(&result), Some(&claim)).await.unwrap();
     let replacement = GateResult {
-        valid_until: 3000,
+        valid_until: 172800,
         ..result.clone()
     };
     assert_eq!(
