@@ -1,0 +1,235 @@
+mod common;
+use cblc::{accounting::*, extensions::*};
+use cgts::*;
+use common::*;
+use data_encoding::BASE64URL_NOPAD as B64;
+use ed25519_dalek::{Signer, SigningKey};
+
+fn extension_policy() -> ExtensionPolicy {
+    ExtensionPolicy {
+        revision: 1,
+        public_record_quorum: 5,
+        change_token_cost: 1,
+    }
+}
+fn scope() -> AccountProofScope {
+    AccountProofScope {
+        circuit_digest: [51; 32],
+        verifying_key_digest: [52; 32],
+    }
+}
+fn gate<'a>(policy: &'a ExtensionPolicy) -> gates::BalanceGate<'a> {
+    gates::BalanceGate {
+        provider: "local",
+        community: "garden",
+        subject: "alice",
+        action: "enter",
+        accounting_community: [1; 32],
+        owner: [2; 32],
+        binding: [3; 32],
+        operator_key: SigningKey::from_bytes(&[9; 32]).verifying_key().to_bytes(),
+        proof_scope: scope(),
+        policy,
+    }
+}
+
+// A real signed issuer assertion at cgts's documented relying-party boundary.
+// This does not claim to generate or test the outstanding extension ZK circuit.
+fn spend() -> gates::ChangeSpend {
+    let policy = AccountPolicy {
+        initial_credit: 3,
+        maximum_available: 4,
+        outgoing_reservation: 1,
+        incoming_reservation: 1,
+        policy_revision: 1,
+        policy_valid_from: 1,
+        policy_valid_until: 3000,
+        newcomer_period: 100,
+        rate_window: 1000,
+        newcomer_admissions: 2,
+        maximum_admissions: 4,
+        refill_period: 100,
+        refill_units: 1,
+        abandon_after: 1000,
+    };
+    let device = SigningKey::from_bytes(&[8; 32]);
+    let mut request = AccountRequest {
+        statement: AccountStatement {
+            protocol_version: 2,
+            community: [1; 32],
+            owner: [2; 32],
+            policy_digest: policy.digest(&[1; 32]).unwrap(),
+            enrollment_root: [1; 32],
+            now: 1050,
+            valid_until: policy.proof_valid_until(1050).unwrap(),
+            genesis: false,
+            previous_version: 0,
+            next_version: 1,
+            previous_state: [2; 32],
+            next_state: [3; 32],
+            settlement_marker: [4; 32],
+            policy,
+        },
+        request_id: [5; 32],
+        proof_scope: scope(),
+        chat_public_key: B64.encode(&device.verifying_key().to_bytes()),
+        issued_at: 1050,
+        expires_at: 1500,
+        proof: vec![1, 2, 3],
+        signature: String::new(),
+    };
+    request.signature = B64.encode(
+        &device
+            .sign(&account_request_bytes(&request).unwrap())
+            .to_bytes(),
+    );
+    let update = ExtendedUpdate {
+        inbox: Inbox::default(),
+        effect: Effect::Change { binding: [3; 32] },
+    };
+    let mut acceptance = AccountAcceptance {
+        statement: request.statement.clone(),
+        request_id: request.request_id,
+        request_digest: extended_request_digest(&request, &update, &extension_policy()).unwrap(),
+        proof_scope: scope(),
+        accepted_at: 1060,
+        signature: String::new(),
+    };
+    acceptance.signature = B64.encode(
+        &SigningKey::from_bytes(&[9; 32])
+            .sign(&account_acceptance_bytes(&acceptance).unwrap())
+            .to_bytes(),
+    );
+    gates::ChangeSpend {
+        request,
+        acceptance,
+        update,
+    }
+}
+
+#[tokio::test]
+async fn signed_change_spend_is_single_use_durable_and_never_a_cached_balance() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("balance.db");
+    let snapshot = snapshot("garden", "cblc");
+    let policy = extension_policy();
+    let gate = gate(&policy);
+    {
+        let db = open(&path).await;
+        let keeper = sql(&db, "garden");
+        let checked = keeper
+            .run(context(&snapshot), &gate, &spend())
+            .await
+            .unwrap();
+        assert!(keeper.collect(context(&snapshot)).await.unwrap().is_empty());
+        assert!(
+            keeper
+                .decide(context(&snapshot), MembershipState::Pending, &[checked])
+                .await
+                .unwrap()
+                .allowed
+        );
+        assert!(
+            !keeper
+                .decide(context(&snapshot), MembershipState::Pending, &[])
+                .await
+                .unwrap()
+                .allowed
+        );
+    }
+    let db = open(&path).await;
+    assert!(matches!(
+        sql(&db, "garden")
+            .run(context(&snapshot), &gate, &spend())
+            .await,
+        Err(Error::Refused)
+    ));
+}
+
+#[tokio::test]
+async fn wrong_effect_subject_owner_scope_binding_expiry_and_signature_fail() {
+    let keeper = memory("garden");
+    let snapshot = snapshot("garden", "cblc");
+    let policy = extension_policy();
+    let mut gate = gate(&policy);
+    let input = spend();
+    assert!(matches!(
+        keeper
+            .run(
+                Context {
+                    subject: "bob",
+                    ..context(&snapshot)
+                },
+                &gate,
+                &input
+            )
+            .await,
+        Err(Error::Refused)
+    ));
+    assert!(matches!(
+        keeper
+            .run(
+                Context {
+                    action: "other",
+                    ..context(&snapshot)
+                },
+                &gate,
+                &input
+            )
+            .await,
+        Err(Error::Refused)
+    ));
+    assert!(matches!(
+        keeper
+            .run(
+                Context {
+                    now: 1500,
+                    ..context(&snapshot)
+                },
+                &gate,
+                &input
+            )
+            .await,
+        Err(Error::Refused)
+    ));
+    gate.binding = [6; 32];
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &input).await,
+        Err(Error::Refused)
+    ));
+    gate.binding = [3; 32];
+    gate.owner = [7; 32];
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &input).await,
+        Err(Error::Refused)
+    ));
+    gate.owner = [2; 32];
+    gate.proof_scope.circuit_digest = [8; 32];
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &input).await,
+        Err(Error::Refused)
+    ));
+    gate.proof_scope = scope();
+    for effect in [Effect::Update, Effect::Punish] {
+        let mut invalid = spend();
+        invalid.update.effect = effect;
+        assert!(matches!(
+            keeper.run(context(&snapshot), &gate, &invalid).await,
+            Err(Error::Refused)
+        ));
+    }
+    let mut invalid = spend();
+    invalid.acceptance.signature = B64.encode(&[0; 64]);
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &invalid).await,
+        Err(Error::Refused)
+    ));
+    invalid = spend();
+    invalid.request.proof[0] ^= 1;
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &invalid).await,
+        Err(Error::Refused)
+    ));
+    // None of those rejections burns the authentic acceptance.
+    keeper.run(context(&snapshot), &gate, &input).await.unwrap();
+}

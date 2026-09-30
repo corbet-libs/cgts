@@ -1,6 +1,10 @@
 //! Community gate orchestration. Leaves verify evidence; this facade retains only
 //! gate metadata and opaque single-use markers. See `docs/CONTRACT.md`.
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    not(debug_assertions),
+    doc = "Release builds exclude the toy gate:\n```compile_fail\nuse cgts::gates::development;\n```"
+)]
 
 mod engine;
 pub mod gates;

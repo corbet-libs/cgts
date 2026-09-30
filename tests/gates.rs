@@ -1,0 +1,349 @@
+mod common;
+use cgts::*;
+use common::*;
+
+async fn round_trip<S: Storage, L: LegalVeto>(keeper: Gatekeeper<S, L>) {
+    let snapshot = snapshot("garden", "cvch");
+    let context = context(&snapshot);
+    assert!(keeper.collect(context).await.unwrap().is_empty());
+    assert!(
+        !keeper
+            .decide(context, MembershipState::Pending, &[])
+            .await
+            .unwrap()
+            .allowed
+    );
+    let checked = keeper
+        .run(context, &gate(), &voucher("garden", "one", 2000))
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(checked.result()).unwrap(),
+        serde_json::json!({
+            "gate":"cvch", "level":"community", "subject":"alice", "provider":"local", "valid_until":2000
+        })
+    );
+    assert!(
+        keeper
+            .decide(context, MembershipState::Pending, &[checked])
+            .await
+            .unwrap()
+            .allowed
+    );
+    assert_eq!(keeper.collect(context).await.unwrap().len(), 1);
+    assert!(
+        keeper
+            .decide(context, MembershipState::Pending, &[])
+            .await
+            .unwrap()
+            .allowed
+    );
+    assert!(matches!(
+        keeper
+            .run(context, &gate(), &voucher("garden", "one", 2000))
+            .await,
+        Err(Error::Refused)
+    ));
+    assert!(matches!(
+        keeper
+            .run(
+                Context {
+                    subject: "bob",
+                    ..context
+                },
+                &gate(),
+                &voucher("garden", "one", 2000)
+            )
+            .await,
+        Err(Error::Refused)
+    ));
+    assert!(
+        keeper
+            .collect(Context {
+                subject: "bob",
+                ..context
+            })
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        keeper
+            .collect(Context {
+                now: 2000,
+                ..context
+            })
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        !keeper
+            .decide(
+                Context {
+                    now: 2000,
+                    ..context
+                },
+                MembershipState::Pending,
+                &[]
+            )
+            .await
+            .unwrap()
+            .allowed
+    );
+    keeper
+        .run(context, &gate(), &voucher("garden", "renewal", 3000))
+        .await
+        .unwrap();
+    let current = keeper.collect(context).await.unwrap();
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0].valid_until, 3000);
+    keeper.withdraw("alice", "cvch", "local").await.unwrap();
+    assert!(keeper.collect(context).await.unwrap().is_empty());
+    assert!(matches!(
+        keeper
+            .run(context, &gate(), &voucher("garden", "renewal", 3000))
+            .await,
+        Err(Error::Refused)
+    ));
+}
+
+#[tokio::test]
+async fn memory_round_trip() {
+    round_trip(memory("garden")).await;
+}
+#[tokio::test]
+async fn libsql_round_trip() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(&dir.path().join("gates.db")).await;
+    round_trip(sql(&db, "garden")).await;
+}
+
+#[tokio::test]
+async fn switches_hide_steps_and_prevent_execution_without_burning() {
+    let keeper = memory("garden");
+    let gate = gate();
+    let descriptor = gate.descriptor();
+    let mut snapshot = snapshot("garden", "cvch");
+    for key in [
+        crbk::gate_key(GateLevel::Community, "cvch"),
+        crbk::provider_key(GateLevel::Community, "cvch", "local"),
+    ] {
+        for value in [None, Some(serde_json::Value::Null), Some(false.into())] {
+            let old = snapshot.content.remove(&key).unwrap();
+            if let Some(value) = value {
+                snapshot.content.insert(key.clone(), value);
+            }
+            let context = context(&snapshot);
+            assert!(
+                keeper
+                    .steps(context, std::slice::from_ref(&descriptor))
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
+            assert!(matches!(
+                keeper
+                    .run(context, &gate, &voucher("garden", "disabled", 2000))
+                    .await,
+                Err(Error::Disabled)
+            ));
+            snapshot.content.insert(key.clone(), old);
+        }
+    }
+    assert_eq!(
+        keeper
+            .steps(context(&snapshot), &[descriptor])
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    keeper
+        .run(
+            context(&snapshot),
+            &gate,
+            &voucher("garden", "disabled", 2000),
+        )
+        .await
+        .unwrap();
+    snapshot.content.insert(
+        crbk::provider_key(GateLevel::Community, "cvch", "local"),
+        false.into(),
+    );
+    assert!(keeper.collect(context(&snapshot)).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn forged_expired_cross_community_and_untrusted_contexts_fail() {
+    let keeper = memory("garden");
+    let mut snapshot = snapshot("garden", "cvch");
+    let input = voucher("garden", "not-burned", 2000);
+    let mut forged = input.clone();
+    forged.signature[0] ^= 1;
+    for input in [
+        forged,
+        voucher("elsewhere", "not-burned", 2000),
+        voucher("garden", "expired", 1100),
+        voucher("garden", "huge", u64::MAX),
+    ] {
+        assert!(matches!(
+            keeper.run(context(&snapshot), &gate(), &input).await,
+            Err(Error::Refused)
+        ));
+    }
+    for bad in [
+        Context {
+            now: -1,
+            ..context(&snapshot)
+        },
+        Context {
+            subject: "",
+            ..context(&snapshot)
+        },
+    ] {
+        assert!(matches!(keeper.collect(bad).await, Err(Error::Invalid)));
+    }
+    snapshot.issued = 1101;
+    assert!(matches!(
+        keeper.collect(context(&snapshot)).await,
+        Err(Error::Invalid)
+    ));
+    snapshot.issued = 100;
+    snapshot.community = "elsewhere".into();
+    assert!(matches!(
+        keeper.collect(context(&snapshot)).await,
+        Err(Error::Scope)
+    ));
+    snapshot.community = "garden".into();
+    keeper
+        .run(context(&snapshot), &gate(), &input)
+        .await
+        .unwrap();
+    assert!(
+        gates::VoucherGate::new(
+            "alias/provider",
+            ed25519_dalek::SigningKey::from_bytes(&[7; 32]).verifying_key()
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn missing_age_metadata_and_wrong_action_bindings_fail_closed() {
+    let keeper = memory("garden");
+    let mut snapshot = snapshot("garden", "cvch");
+    let checked = keeper
+        .run(context(&snapshot), &gate(), &voucher("garden", "one", 2000))
+        .await
+        .unwrap();
+    let mut policy: crbk::ActionPolicy =
+        serde_json::from_value(snapshot.content[&crbk::action_key("enter")].clone()).unwrap();
+    policy.maximum_proof_age = Some(1000);
+    snapshot.content.insert(
+        crbk::action_key("enter"),
+        serde_json::to_value(policy).unwrap(),
+    );
+    assert!(
+        !keeper
+            .decide(context(&snapshot), MembershipState::Pending, &[])
+            .await
+            .unwrap()
+            .allowed
+    );
+    let wrong = Context {
+        action: "edit",
+        ..context(&snapshot)
+    };
+    assert!(matches!(
+        keeper
+            .decide(wrong, MembershipState::Pending, &[checked])
+            .await,
+        Err(Error::Scope)
+    ));
+}
+
+#[tokio::test]
+async fn real_legal_order_cannot_be_bypassed_by_switch_or_empty_policy() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(&dir.path().join("legal.db")).await;
+    let keeper = sql(&db, "garden");
+    let legal = clbs::Gate::new(
+        clbs::LibsqlStore::new(&db, "garden").unwrap(),
+        Authority,
+        Clock,
+    );
+    let mut snapshot = snapshot("garden", "cvch");
+    snapshot.content.insert(
+        crbk::action_key("enter"),
+        serde_json::to_value(crbk::ActionPolicy::default()).unwrap(),
+    );
+    snapshot
+        .content
+        .insert(crbk::gate_key(GateLevel::Community, "clbs"), false.into());
+    assert!(
+        keeper
+            .decide(context(&snapshot), MembershipState::Pending, &[])
+            .await
+            .unwrap()
+            .allowed
+    );
+    legal.record_legal(&order("garden")).await.unwrap();
+    let verdict = keeper
+        .decide(context(&snapshot), MembershipState::Pending, &[])
+        .await
+        .unwrap();
+    assert!(!verdict.allowed && verdict.legal_veto);
+    assert!(matches!(
+        keeper
+            .run(context(&snapshot), &gate(), &voucher("garden", "one", 2000))
+            .await,
+        Err(Error::Vetoed)
+    ));
+    assert!(
+        keeper
+            .steps(
+                Context {
+                    action: "edit",
+                    ..context(&snapshot)
+                },
+                &[gate().descriptor()]
+            )
+            .await
+            .is_ok()
+    );
+    assert!(
+        keeper
+            .decide(
+                Context {
+                    now: 1200,
+                    ..context(&snapshot)
+                },
+                MembershipState::Pending,
+                &[]
+            )
+            .await
+            .unwrap()
+            .allowed
+    );
+}
+
+#[tokio::test]
+async fn mismatched_community_capabilities_are_rejected() {
+    assert!(matches!(
+        Gatekeeper::new(
+            MemoryStore::new("a").unwrap(),
+            LegalGate::new(clbs::MemoryStore::new("b").unwrap(), Authority)
+        ),
+        Err(Error::Scope)
+    ));
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn development_gate_has_global_metadata_and_headless_step() {
+    let result = gates::development::global("holder", 100, 200).unwrap();
+    assert_eq!(result.level, GateLevel::Global);
+    assert_eq!(gates::development::descriptor().steps.len(), 1);
+    assert!(gates::development::global("holder", 200, 200).is_err());
+}
