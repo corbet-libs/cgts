@@ -195,41 +195,6 @@ impl Gate for BalanceGate<'_> {
     }
 }
 
-/// Development-only global toy gate. This module and its always-pass behavior
-/// are absent whenever debug assertions are disabled (including release builds).
-#[cfg(debug_assertions)]
-pub mod development {
-    use super::*;
-
-    /// Explicit toy-model global check. The global service owns the holder scope;
-    /// cgts never persists this result in a community database.
-    pub fn global(subject: &str, now: i64, valid_until: i64) -> Result<GateResult> {
-        identifier(subject)?;
-        if now < 0 || valid_until <= now {
-            return Err(Error::Invalid);
-        }
-        Ok(GateResult {
-            gate: "development-test".into(),
-            level: GateLevel::Global,
-            subject: subject.into(),
-            provider: "development".into(),
-            valid_until,
-        })
-    }
-
-    /// Headless description for the global toy service.
-    pub fn descriptor() -> Descriptor {
-        let mut result = description(
-            "development-test",
-            "development",
-            "Complete the development-only test gate.",
-            "unit",
-        );
-        result.level = GateLevel::Global;
-        result
-    }
-}
-
 /// Public-record proof supplied transiently to the balance leaf. Below-quorum
 /// records still require a proof; no raw counters are accepted or retained.
 pub struct RecordProof {

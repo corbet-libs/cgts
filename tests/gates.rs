@@ -340,15 +340,6 @@ async fn mismatched_community_capabilities_are_rejected() {
     ));
 }
 
-#[cfg(debug_assertions)]
-#[test]
-fn development_gate_has_global_metadata_and_headless_step() {
-    let result = gates::development::global("holder", 100, 200).unwrap();
-    assert_eq!(result.level, GateLevel::Global);
-    assert_eq!(gates::development::descriptor().steps.len(), 1);
-    assert!(gates::development::global("holder", 200, 200).is_err());
-}
-
 #[tokio::test]
 async fn checked_collection_rejects_other_action_time_revision_epoch_and_subject() {
     let keeper = memory("garden");
@@ -392,4 +383,16 @@ async fn checked_collection_rejects_other_action_time_revision_epoch_and_subject
             })
             .is_err()
     );
+}
+
+#[test]
+fn gate_result_debug_does_not_expose_the_subject() {
+    let result = GateResult {
+        gate: "cvch".into(),
+        level: GateLevel::Community,
+        subject: "private-member".into(),
+        provider: "local".into(),
+        valid_until: 2000,
+    };
+    assert_eq!(format!("{result:?}"), "GateResult { .. }");
 }

@@ -2,7 +2,7 @@ use crate::{Error, GateLevel, Result, Snapshot, component, identifier};
 use serde::Serialize;
 
 /// The complete public gate result. No raw evidence, score or issuance timestamp.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct GateResult {
     /// Gate identifier.
     pub gate: String,
@@ -229,5 +229,11 @@ impl CheckedGates {
                 })
             })
             .collect()
+    }
+}
+
+impl std::fmt::Debug for GateResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GateResult").finish_non_exhaustive()
     }
 }

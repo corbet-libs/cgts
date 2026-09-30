@@ -11,6 +11,8 @@ fn extension_policy() -> ExtensionPolicy {
         revision: 1,
         public_record_quorum: 5,
         change_token_cost: 1,
+        deposit_delay_seconds: 60,
+        minimum_deposit_batch: 2,
     }
 }
 fn scope() -> AccountProofScope {
@@ -85,6 +87,7 @@ fn spend() -> gates::ChangeSpend {
             .to_bytes(),
     );
     let update = ExtendedUpdate {
+        previous_inbox: Inbox::default(),
         inbox: Inbox::default(),
         effect: Effect::Change { binding: [3; 32] },
     };
@@ -186,7 +189,7 @@ async fn wrong_effect_subject_owner_scope_binding_expiry_and_signature_fail() {
         Err(Error::ExtensionsUnavailable)
     ));
     gate.proof_scope = scope();
-    for effect in [Effect::Update, Effect::Punish] {
+    for effect in [Effect::Update, Effect::Change { binding: [0; 32] }] {
         let mut invalid = spend();
         invalid.update.effect = effect;
         assert!(matches!(

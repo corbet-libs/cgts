@@ -87,11 +87,10 @@ explicit withdrawal. Callers control endpoint authorization.
   Standalone cblc ledgers own a runtime: construct and drop their final owner on
   a blocking thread. Composed services should supply their crlt capability and
   shared runtime through the leaf's storage adapter.
-- `gates::development`: global always-pass toy gate and headless description,
-  guarded by `cfg(debug_assertions)`. Absent in normal release builds, with no
-  Cargo feature to enable it there. It is never accepted by the community runner.
-  Do not deploy debug builds as production; custom profiles must disable debug
-  assertions. The global toy service supplies its own rulebook switch checks.
+The global development gate belongs only to cglb. cgts exports no development
+module in any build, including release profiles with debug assertions. CI checks
+that the old entry point fails to compile with that hardened release profile.
+GateResult Debug output is redacted; wire serialization remains explicit.
 
 Other leaves can implement the typed `Gate` boundary without extending a giant
 request enum. Gate implementations are server-authorized verification code, not
