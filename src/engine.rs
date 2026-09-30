@@ -120,6 +120,9 @@ impl<S: Storage, L: LegalVeto> Gatekeeper<S, L> {
         self.preflight(context).await?;
         let descriptor = gate.descriptor();
         descriptor.validate()?;
+        if descriptor.gate == "cblc" {
+            return Err(Error::ExtensionsUnavailable);
+        }
         if descriptor.level != GateLevel::Community {
             return Err(Error::Scope);
         }

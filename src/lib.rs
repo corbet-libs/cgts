@@ -24,6 +24,9 @@ pub enum Error {
     /// Gate or provider is off, absent or null in the snapshot.
     #[error("gate unavailable")]
     Disabled,
+    /// The complete private balance extension relation has not been proven.
+    #[error("balance and record gates unavailable: extension proofs are not enabled")]
+    ExtensionsUnavailable,
     /// Evidence failed verification or was already spent.
     #[error("gate refused")]
     Refused,

@@ -7,7 +7,9 @@ Native Rust, FSL-1.1-ALv2. Development API; never publish to a registry.
 `Gatekeeper::{steps,run,collect,decide,withdraw}` operates within one community.
 `Gate` has a typed transient input; its result contains only gate, level,
 subject, provider and exclusive expiry. `VoucherGate`, `ProfileGate`,
-`BalanceGate`, `RecordGate` and `LegalGate` adapt the existing leaves. The global toy test gate
+`BalanceGate`, `RecordGate` and `LegalGate` adapt the existing leaves. Balance
+and record execution is disabled with an explicit error until cblc extension
+proofs are established. The global toy test gate
 exists only in builds with debug assertions. See [the implemented contract](docs/CONTRACT.md).
 
 The service supplies an authenticated active `crbk::Snapshot`, subject, action,

@@ -154,3 +154,12 @@ transient check time, including for an empty collection. cplc consumes this
 capability; serialized gate metadata cannot construct it. This method performs
 no rulebook decision. Exact transient time is needed to bind one operation and
 is never persisted or signed.
+
+## Balance extension activation
+
+The current cblc main is pinned with its reviewed dependencies. Both balance and
+record execution fail with `ExtensionsUnavailable` before a provider/verifier can
+run: an issuer signature alone does not prove the extension relation. No feature
+can activate these gates until the complete leaf circuit has independent passing
+proof tests. The runner also refuses custom adapters using the reserved cblc gate
+ID. This guard is required even when settings enable that gate.

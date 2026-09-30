@@ -109,42 +109,17 @@ fn spend() -> gates::ChangeSpend {
 }
 
 #[tokio::test]
-async fn signed_change_spend_is_single_use_durable_and_never_a_cached_balance() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("balance.db");
-    let snapshot = snapshot("garden", "cblc");
+async fn signed_acceptance_alone_cannot_enable_the_unproven_extension() {
     let policy = extension_policy();
-    let gate = gate(&policy);
-    {
-        let db = open(&path).await;
-        let keeper = sql(&db, "garden");
-        let checked = keeper
-            .run(context(&snapshot), &gate, &spend())
-            .await
-            .unwrap();
-        assert!(keeper.collect(context(&snapshot)).await.unwrap().is_empty());
-        assert!(
-            keeper
-                .decide(context(&snapshot), MembershipState::Pending, &[checked])
-                .await
-                .unwrap()
-                .allowed
-        );
-        assert!(
-            !keeper
-                .decide(context(&snapshot), MembershipState::Pending, &[])
-                .await
-                .unwrap()
-                .allowed
-        );
-    }
-    let db = open(&path).await;
+    let snapshot = snapshot("garden", "cblc");
+    let keeper = memory("garden");
     assert!(matches!(
-        sql(&db, "garden")
-            .run(context(&snapshot), &gate, &spend())
+        keeper
+            .run(context(&snapshot), &gate(&policy), &spend())
             .await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
+    assert!(keeper.collect(context(&snapshot)).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -165,7 +140,7 @@ async fn wrong_effect_subject_owner_scope_binding_expiry_and_signature_fail() {
                 &input
             )
             .await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     assert!(matches!(
         keeper
@@ -178,7 +153,7 @@ async fn wrong_effect_subject_owner_scope_binding_expiry_and_signature_fail() {
                 &input
             )
             .await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     assert!(matches!(
         keeper
@@ -191,24 +166,24 @@ async fn wrong_effect_subject_owner_scope_binding_expiry_and_signature_fail() {
                 &input
             )
             .await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     gate.binding = [6; 32];
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &input).await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     gate.binding = [3; 32];
     gate.owner = [7; 32];
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &input).await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     gate.owner = [2; 32];
     gate.proof_scope.circuit_digest = [8; 32];
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &input).await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     gate.proof_scope = scope();
     for effect in [Effect::Update, Effect::Punish] {
@@ -216,23 +191,26 @@ async fn wrong_effect_subject_owner_scope_binding_expiry_and_signature_fail() {
         invalid.update.effect = effect;
         assert!(matches!(
             keeper.run(context(&snapshot), &gate, &invalid).await,
-            Err(Error::Refused)
+            Err(Error::ExtensionsUnavailable)
         ));
     }
     let mut invalid = spend();
     invalid.acceptance.signature = B64.encode(&[0; 64]);
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &invalid).await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     invalid = spend();
     invalid.request.proof[0] ^= 1;
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &invalid).await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
-    // None of those rejections burns the authentic acceptance.
-    keeper.run(context(&snapshot), &gate, &input).await.unwrap();
+    // Even a signed issuer assertion cannot activate an unproven circuit.
+    assert!(matches!(
+        keeper.run(context(&snapshot), &gate, &input).await,
+        Err(Error::ExtensionsUnavailable)
+    ));
 }
 
 #[tokio::test]
@@ -306,22 +284,22 @@ async fn record_gate_refuses_without_the_complete_extension_relation() {
     };
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &input).await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     input.record.context.purpose = RecordUse::FirstContact;
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &input).await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     input.proof.clear();
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &input).await,
-        Err(Error::Refused)
+        Err(Error::ExtensionsUnavailable)
     ));
     gate.subject = "bob";
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &input).await,
-        Err(Error::Scope)
+        Err(Error::ExtensionsUnavailable)
     ));
     assert!(keeper.collect(context(&snapshot)).await.unwrap().is_empty());
     // The standalone leaf owns a runtime: its final drop, like construction,
