@@ -884,6 +884,7 @@ name = "cpns"
 version = "0.0.0"
 source = "git+https://github.com/corbet-foss/cpns?rev=23968a9fa338791e70078c6070a6f1f3cf185ff7#23968a9fa338791e70078c6070a6f1f3cf185ff7"
 dependencies = [
+ "crlt",
  "getrandom 0.4.3",
  "sha2 0.11.0",
  "subtle",
