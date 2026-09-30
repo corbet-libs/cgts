@@ -49,3 +49,10 @@ pub fn verify_pin_change(
     change_binding(change)?;
     Err(Error::ExtensionsUnavailable)
 }
+
+/// Wire entry point for the pin-change flow. No wire evidence can activate an
+/// unproven extension, regardless of feature unification in downstream crates.
+pub fn verify_encoded_pin_change(change: &Change<'_>, _: &[u8]) -> Result<SpentChange> {
+    change_binding(change)?;
+    Err(Error::ExtensionsUnavailable)
+}
