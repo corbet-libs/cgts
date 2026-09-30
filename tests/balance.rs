@@ -117,6 +117,10 @@ async fn signed_acceptance_alone_cannot_enable_the_unproven_extension() {
     let snapshot = snapshot("garden", "cblc");
     let keeper = memory("garden");
     assert!(matches!(
+        gate(&policy).verify(context(&snapshot), &spend()).await,
+        Err(Error::ExtensionsUnavailable)
+    ));
+    assert!(matches!(
         keeper
             .run(context(&snapshot), &gate(&policy), &spend())
             .await,
@@ -310,4 +314,68 @@ async fn record_gate_refuses_without_the_complete_extension_relation() {
     tokio::task::spawn_blocking(move || drop(gate))
         .await
         .unwrap();
+}
+
+#[test]
+fn pin_spend_uses_the_leaf_binding_and_stays_disabled_for_every_transition() {
+    use cpns::{
+        Fingerprint,
+        server::{Change, Pin},
+    };
+    let member = "01".repeat(48);
+    let other = "02".repeat(48);
+    let base = Change {
+        community: "garden",
+        member: &member,
+        field: "age",
+        expected: Pin {
+            fingerprint: Fingerprint::from_bytes([1; 32]),
+            revision: 1,
+        },
+        replacement: Fingerprint::from_bytes([2; 32]),
+    };
+    let binding = pins::change_binding(&base).unwrap();
+    assert_eq!(binding, cblc::pins::change_binding(&base).unwrap());
+    for change in [
+        Change {
+            community: "other",
+            ..base
+        },
+        Change {
+            member: &other,
+            ..base
+        },
+        Change {
+            field: "other",
+            ..base
+        },
+        Change {
+            expected: Pin {
+                revision: 2,
+                ..base.expected
+            },
+            ..base
+        },
+        Change {
+            expected: Pin {
+                fingerprint: Fingerprint::from_bytes([3; 32]),
+                ..base.expected
+            },
+            ..base
+        },
+        Change {
+            replacement: Fingerprint::from_bytes([4; 32]),
+            ..base
+        },
+    ] {
+        assert_ne!(pins::change_binding(&change).unwrap(), binding);
+        assert!(matches!(
+            pins::verify_pin_change(&change, &spend()),
+            Err(Error::ExtensionsUnavailable)
+        ));
+    }
+    assert!(matches!(
+        pins::verify_pin_change(&base, &spend()),
+        Err(Error::ExtensionsUnavailable)
+    ));
 }

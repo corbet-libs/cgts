@@ -171,46 +171,8 @@ impl Gate for BalanceGate<'_> {
             "cblc.ChangeSpend",
         )
     }
-    async fn verify(&self, context: Context<'_>, input: &Self::Input) -> Result<Proof> {
-        let now = u64::try_from(context.now).map_err(|_| Error::Invalid)?;
-        let request = &input.request;
-        let statement = &request.statement;
-        if context.snapshot.community != self.community
-            || context.subject != self.subject
-            || context.action != self.action
-            || statement.community != self.accounting_community
-            || statement.owner != self.owner
-            || self.binding == [0; 32]
-            || input.update.effect
-                != (cblc::extensions::Effect::Change {
-                    binding: self.binding,
-                })
-            || statement.genesis
-            || statement.settlement_marker == [0; 32]
-            || request.proof_scope != self.proof_scope
-            || request.issued_at > now
-            || request.expires_at <= now
-            || statement.valid_until <= now
-            || input.acceptance.accepted_at > now
-        {
-            return Err(Error::Refused);
-        }
-        cblc::extensions::verify_extended_acceptance(
-            &input.acceptance,
-            request,
-            &input.update,
-            self.policy,
-            &self.operator_key,
-        )
-        .map_err(|_| Error::Refused)?;
-        // The marker alone is deliberately not associated with an owner or time.
-        let claim = Claim::new("cblc-change", statement.settlement_marker.to_vec())?;
-        let expiry = statement
-            .valid_until
-            .min(request.expires_at)
-            .try_into()
-            .map_err(|_| Error::Refused)?;
-        Ok(Proof::transient(expiry).with_claim(claim))
+    async fn verify(&self, _: Context<'_>, _: &Self::Input) -> Result<Proof> {
+        Err(Error::ExtensionsUnavailable)
     }
 }
 
@@ -257,46 +219,8 @@ impl<V: cblc::accounting::AccountProofVerifier + Send + 'static> Gate for Record
             "cblc.RecordProof",
         )
     }
-    async fn verify(&self, context: Context<'_>, input: &Self::Input) -> Result<Proof> {
-        if context.snapshot.community != self.community
-            || context.subject != self.subject
-            || context.action != self.action
-            || self.clock.now().map_err(|_| Error::Invalid)? != context.now
-        {
-            return Err(Error::Scope);
-        }
-        // Cap transport-level copies; cblc enforces its configured proof bound too.
-        if input.proof.is_empty() || input.proof.len() > 1024 * 1024 {
-            return Err(Error::Refused);
-        }
-        let ledger = self.ledger.clone();
-        let record = input.record.clone();
-        let proof = input.proof.clone();
-        let expected = self.expected.clone();
-        let owner = self.owner;
-        let clock = self.clock.clone();
-        let until = i64::try_from(expected.expires_at).map_err(|_| Error::Invalid)?;
-        tokio::task::spawn_blocking(move || {
-            ledger
-                .lock()
-                .map_err(|_| Error::Storage)?
-                .check_record(owner, &expected, &record, &proof, || {
-                    clock
-                        .now()
-                        .ok()
-                        .and_then(|v| v.try_into().ok())
-                        .unwrap_or(u64::MAX)
-                })
-                .map_err(|_| Error::Refused)?;
-            Ok::<(), Error>(())
-        })
-        .await
-        .map_err(|_| Error::Refused)??;
-        let completed = self.clock.now().map_err(|_| Error::Invalid)?;
-        if completed < context.now || completed >= until {
-            return Err(Error::Refused);
-        }
-        Ok(Proof::transient(until))
+    async fn verify(&self, _: Context<'_>, _: &Self::Input) -> Result<Proof> {
+        Err(Error::ExtensionsUnavailable)
     }
 }
 

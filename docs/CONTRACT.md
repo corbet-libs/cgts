@@ -101,3 +101,13 @@ Checked receipts bind the complete resolved setting values and authenticated
 publication issuance time as well as revision/epoch. Reusing a revision while
 changing a gate parameter cannot transplant a receipt into cplc's publication.
 These bindings are transient and never written to the gate result tables.
+
+The production pin adapter is `pins::PinSpendVerifier`, with the opaque
+`pins::SpentChange` token. `pins::change_binding` delegates the complete transition
+to cblc's canonical framing. `verify_pin_change` currently returns
+`ExtensionsUnavailable`; no accepting token constructor exists. cmbr wires this
+adapter directly into cpns's authorized compare-and-exchange, so neither an
+unspent token nor a caller-built signed receipt can alter a pin. Balance and
+record adapters themselves also refuse, even when called outside Gatekeeper.
+Positive extension-spend/restart tests cannot honestly pass until cblc's private
+extension circuit is proven; the current tests require refusal for all contexts.

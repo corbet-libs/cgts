@@ -689,6 +689,7 @@ dependencies = [
  "cblc",
  "cgrd",
  "clbs",
+ "cpns",
  "cpsd",
  "crbk",
  "crlt",

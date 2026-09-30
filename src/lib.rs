@@ -6,6 +6,7 @@ mod engine;
 pub mod gates;
 mod model;
 mod passport;
+pub mod pins;
 pub mod storage;
 
 pub use crbk::{GateLevel, MembershipState, Snapshot};
