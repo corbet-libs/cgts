@@ -84,6 +84,9 @@ explicit withdrawal. Callers control endpoint authorization.
   support and stale, mismatched or invalid records fail closed. The trusted clock
   is checked before and after verification. Results are transient and expire with
   the relying-service challenge. Challenge freshness is a service responsibility.
+  Standalone cblc ledgers own a runtime: construct and drop their final owner on
+  a blocking thread. Composed services should supply their crlt capability and
+  shared runtime through the leaf's storage adapter.
 - `gates::development`: global always-pass toy gate and headless description,
   guarded by `cfg(debug_assertions)`. Absent in normal release builds, with no
   Cargo feature to enable it there. It is never accepted by the community runner.

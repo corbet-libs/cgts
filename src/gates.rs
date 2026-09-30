@@ -242,6 +242,8 @@ pub struct RecordProof {
 /// cblc's required fresh record gate for forum listing and first contact.
 /// The service selects the ledger, authenticated owner and expected challenge;
 /// request data cannot select them. Run inside a Tokio runtime.
+/// Construct and drop a standalone ledger's last owner on a blocking thread;
+/// prefer a service-owned crlt capability/runtime when composing storage.
 pub struct RecordGate<'a, V: cblc::accounting::AccountProofVerifier> {
     /// Configured provider.
     pub provider: &'a str,

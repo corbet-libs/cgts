@@ -324,4 +324,9 @@ async fn record_gate_refuses_without_the_complete_extension_relation() {
         Err(Error::Scope)
     ));
     assert!(keeper.collect(context(&snapshot)).await.unwrap().is_empty());
+    // The standalone leaf owns a runtime: its final drop, like construction,
+    // belongs outside async execution. Services normally retain the shared ledger.
+    tokio::task::spawn_blocking(move || drop(gate))
+        .await
+        .unwrap();
 }
