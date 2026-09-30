@@ -42,6 +42,9 @@ impl Gate for VoucherGate {
         )
     }
     async fn verify(&self, context: Context<'_>, voucher: &Self::Input) -> Result<Proof> {
+        if voucher.valid_until > i64::MAX as u64 {
+            return Err(Error::Refused);
+        }
         let now = context.now.try_into().map_err(|_| Error::Invalid)?;
         cvch::verify(
             voucher,
