@@ -642,7 +642,7 @@ dependencies = [
 [[package]]
 name = "cblc"
 version = "0.0.0"
-source = "git+https://github.com/corbet-libs/cblc?branch=main#43a241855f04fa5c41375ed3fbddc7c15e7ad55b"
+source = "git+https://github.com/corbet-libs/cblc?branch=main#8ec49ce8a7401232ddbe1db7ef1edec03d4863f9"
 dependencies = [
  "cpns",
  "crlt",
@@ -933,7 +933,7 @@ dependencies = [
 [[package]]
 name = "cpns"
 version = "0.0.0"
-source = "git+https://github.com/corbet-foss/cpns?branch=main#7b189964a9513f937ba774d603d4b5a327df640b"
+source = "git+https://github.com/corbet-foss/cpns?branch=main#71145788c12f25a5f6c89437e9e217dea4480a4b"
 dependencies = [
  "crlt",
  "getrandom 0.4.3",
@@ -1096,7 +1096,7 @@ dependencies = [
 [[package]]
 name = "crlt"
 version = "0.0.0"
-source = "git+https://github.com/corbet-foss/crlt?branch=main#faeb41d6982f540fec2c6166c6fca3e4dc271353"
+source = "git+https://github.com/corbet-foss/crlt?branch=main#1005040bf9776cab2bccc8b2aa20ac1c48edd615"
 dependencies = [
  "deadpool",
  "libsql",
@@ -1208,7 +1208,7 @@ dependencies = [
 [[package]]
 name = "cssr"
 version = "0.0.0"
-source = "git+https://github.com/corbet-foss/cssr?branch=main#7fc0ebd0d22baa7bce3b7f54bd9801d10229c62a"
+source = "git+https://github.com/corbet-foss/cssr?branch=main#c489601d07d18d4b34e249f40137c01baf535bd8"
 dependencies = [
  "crlt",
  "p256",

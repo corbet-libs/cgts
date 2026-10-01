@@ -77,7 +77,8 @@ async fn actual_signed_profile_is_bound_to_scope_and_never_retained() {
         Err(Error::Refused)
     ));
     assert!(matches!(
-        gate.verify(Context { now: -1, ..context }, &fixture.bundle).await,
+        gate.verify(Context { now: -1, ..context }, &fixture.bundle)
+            .await,
         Err(Error::Invalid)
     ));
     gate.policy.community = "other";

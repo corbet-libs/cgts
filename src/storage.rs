@@ -161,7 +161,10 @@ impl LibsqlStore {
             (SPEND, params!["gate", vec![0u8]]),
         ];
         for (statement, parameters) in plans {
-            self.db.explain(statement, parameters).await?.assert_indexed()?;
+            self.db
+                .explain(statement, parameters)
+                .await?
+                .assert_indexed()?;
         }
         Ok(())
     }

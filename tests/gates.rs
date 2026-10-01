@@ -481,18 +481,38 @@ async fn every_retained_provider_expiry_is_rounded_down_to_a_day() {
     }
     let keeper = memory("garden");
     let snapshot = snapshot("garden", "cvch");
-    let context = Context { now: 86401, ..context(&snapshot) };
+    let context = Context {
+        now: 86401,
+        ..context(&snapshot)
+    };
     let provider = SignedDeadline(GateLevel::Community);
     let accepted = voucher("garden", "deadline", 172923);
     let checked = keeper.run(context, &provider, &accepted).await.unwrap();
     assert_eq!(checked.result().valid_until, 172800);
-    assert_eq!(keeper.collect(context).await.unwrap()[0].valid_until, 172800);
+    assert_eq!(
+        keeper.collect(context).await.unwrap()[0].valid_until,
+        172800
+    );
     // Authentic unexpired evidence can still have a coarse deadline in the past.
     let short = voucher("garden", "short-deadline", 86402);
-    assert!(matches!(keeper.run(context, &provider, &short).await, Err(Error::Refused)));
-    assert_eq!(keeper.collect(context).await.unwrap()[0].valid_until, 172800);
-    assert!(matches!(keeper.run(context, &SignedDeadline(GateLevel::Global), &accepted).await, Err(Error::Scope)));
-    assert!(matches!(keeper.check(context, vec![checked.clone(), checked]).await, Err(Error::Scope)));
+    assert!(matches!(
+        keeper.run(context, &provider, &short).await,
+        Err(Error::Refused)
+    ));
+    assert_eq!(
+        keeper.collect(context).await.unwrap()[0].valid_until,
+        172800
+    );
+    assert!(matches!(
+        keeper
+            .run(context, &SignedDeadline(GateLevel::Global), &accepted)
+            .await,
+        Err(Error::Scope)
+    ));
+    assert!(matches!(
+        keeper.check(context, vec![checked.clone(), checked]).await,
+        Err(Error::Scope)
+    ));
 }
 
 #[tokio::test]
