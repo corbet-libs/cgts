@@ -203,3 +203,106 @@ async fn memory_claim_and_result_commit_share_the_same_contract() {
     assert!(store.load("").await.is_err());
     assert!(store.remove("alice", "bad/gate", "local").await.is_err());
 }
+
+async fn optional_claim_and_result_parity(store: impl Storage) {
+    store.commit(None, None).await.unwrap();
+    let first = Claim::new("cvch", vec![1; 32]).unwrap();
+    store.commit(None, Some(&first)).await.unwrap();
+    assert_eq!(store.commit(None, Some(&first)).await, Err(Error::Refused));
+    assert!(store.load("alice").await.unwrap().is_empty());
+    let result = GateResult {
+        gate: "cvch".into(),
+        level: GateLevel::Community,
+        subject: "alice".into(),
+        provider: "local".into(),
+        valid_until: 86400,
+    };
+    let global = GateResult {
+        level: GateLevel::Global,
+        ..result.clone()
+    };
+    let second = Claim::new("cvch", vec![2; 32]).unwrap();
+    assert_eq!(store.commit(Some(&global), Some(&second)).await, Err(Error::Scope));
+    store.commit(Some(&result), Some(&second)).await.unwrap();
+    let later = GateResult {
+        valid_until: 172800,
+        ..result.clone()
+    };
+    store.commit(Some(&later), None).await.unwrap();
+    let other = GateResult {
+        subject: "bob".into(),
+        ..result
+    };
+    store.commit(Some(&other), None).await.unwrap();
+    assert_eq!(store.load("alice").await.unwrap(), [later]);
+    assert_eq!(store.load("bob").await.unwrap(), [other]);
+    store.remove("alice", "cvch", "local").await.unwrap();
+    store.remove("alice", "cvch", "local").await.unwrap();
+    assert!(store.load("alice").await.unwrap().is_empty());
+    assert_eq!(store.commit(None, Some(&second)).await, Err(Error::Refused));
+    for (subject, gate, provider) in [("", "cvch", "local"), ("alice", "cvch", "bad/provider")] {
+        assert_eq!(store.remove(subject, gate, provider).await, Err(Error::Invalid));
+    }
+}
+
+#[tokio::test]
+async fn memory_and_sql_preserve_claims_across_optional_writes_and_removal() {
+    optional_claim_and_result_parity(MemoryStore::new("garden").unwrap()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(&dir.path().join("optional.db")).await;
+    optional_claim_and_result_parity(LibsqlStore::new(&db, "garden").unwrap()).await;
+}
+
+#[tokio::test]
+async fn imported_storage_type_corruption_is_a_closed_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let schema = SCHEMA
+        .replace("gate TEXT NOT NULL", "gate BLOB NOT NULL")
+        .replace("provider TEXT NOT NULL", "provider BLOB NOT NULL")
+        .replace(
+            "valid_until INTEGER NOT NULL CHECK (valid_until > 0 AND valid_until % 86400 = 0)",
+            "valid_until BLOB NOT NULL",
+        );
+    let db = crlt::Db::open(crlt::Config::new(
+        format!("file://{}", dir.path().join("imported.db").display()),
+        "",
+    ))
+    .await
+    .unwrap();
+    db.migrate(&[crlt::Migration::new(1, "imported", &schema)])
+        .await
+        .unwrap();
+    let raw = db.community("garden").unwrap();
+    let store = LibsqlStore::new(&db, "garden").unwrap();
+    for (gate, provider, expiry) in [
+        (crlt::Value::Blob(vec![1]), crlt::Value::Text("local".into()), crlt::Value::Integer(86400)),
+        (crlt::Value::Text("cvch".into()), crlt::Value::Blob(vec![1]), crlt::Value::Integer(86400)),
+        (crlt::Value::Text("cvch".into()), crlt::Value::Text("local".into()), crlt::Value::Real(1.5)),
+        (crlt::Value::Text("cvch".into()), crlt::Value::Text("local".into()), crlt::Value::Integer(86401)),
+    ] {
+        raw.execute(
+            "INSERT INTO cgts_results (subject, gate, provider, valid_until) VALUES (?1, ?2, ?3, ?4)",
+            crlt::params!["alice", gate, provider, expiry],
+        )
+        .await
+        .unwrap();
+        assert_eq!(store.load("alice").await, Err(Error::Storage));
+        raw.execute("DELETE FROM cgts_results WHERE subject = ?1", ["alice"])
+            .await
+            .unwrap();
+    }
+    assert!(store.load("alice").await.unwrap().is_empty());
+}
+
+#[test]
+fn identifiers_and_claim_markers_enforce_byte_boundaries() {
+    for value in [" ".to_owned(), "x".repeat(257), "a\0b".to_owned()] {
+        assert!(matches!(MemoryStore::new(value), Err(Error::Invalid)));
+    }
+    assert!(MemoryStore::new("x".repeat(256)).is_ok());
+    for marker in [vec![], vec![1; 129]] {
+        assert!(matches!(Claim::new("cvch", marker), Err(Error::Invalid)));
+    }
+    assert!(Claim::new("cvch", vec![1; 128]).is_ok());
+    assert!(matches!(Claim::new("bad/domain", vec![1]), Err(Error::Invalid)));
+}

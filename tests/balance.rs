@@ -336,6 +336,18 @@ fn pin_spend_uses_the_leaf_binding_and_stays_disabled_for_every_transition() {
     };
     let binding = pins::change_binding(&base).unwrap();
     assert_eq!(binding, cblc::pins::change_binding(&base).unwrap());
+    for wire in [vec![], vec![0; 256]] {
+        assert!(matches!(
+            pins::verify_encoded_pin_change(&base, &wire),
+            Err(Error::ExtensionsUnavailable)
+        ));
+    }
+    let invalid = Change { member: "", ..base };
+    assert!(matches!(pins::change_binding(&invalid), Err(Error::Invalid)));
+    assert!(matches!(
+        pins::verify_encoded_pin_change(&invalid, &[]),
+        Err(Error::Invalid)
+    ));
     for change in [
         Change {
             community: "other",
