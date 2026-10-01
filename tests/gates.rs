@@ -560,27 +560,62 @@ async fn registered_metadata_and_snapshot_bounds_are_checked_before_execution() 
     let keeper = memory("garden");
     let original = snapshot("garden", "cvch");
     for steps in [vec![], vec![gate().descriptor().steps[0].clone(); 33]] {
-        let descriptor = Descriptor { steps, ..gate().descriptor() };
-        assert!(matches!(keeper.steps(context(&original), &[descriptor]).await, Err(Error::Invalid)));
+        let descriptor = Descriptor {
+            steps,
+            ..gate().descriptor()
+        };
+        assert!(matches!(
+            keeper.steps(context(&original), &[descriptor]).await,
+            Err(Error::Invalid)
+        ));
     }
     let mut descriptor = gate().descriptor();
     descriptor.level = GateLevel::Global;
-    assert!(keeper.steps(context(&original), &[descriptor]).await.unwrap().is_empty());
+    assert!(
+        keeper
+            .steps(context(&original), &[descriptor])
+            .await
+            .unwrap()
+            .is_empty()
+    );
     for (issued, revision) in [(-1, 1), (100, 0)] {
         let mut snapshot = original.clone();
         snapshot.issued = issued;
         snapshot.revision = revision;
-        assert!(matches!(keeper.collect(context(&snapshot)).await, Err(Error::Invalid)));
-    }
-    for value in [serde_json::Value::Null, "thirty".into(), 0.into(), 366.into()] {
-        let mut snapshot = original.clone();
-        snapshot.content.insert(gates::VOUCHER_VALIDITY_DAYS.into(), value);
         assert!(matches!(
-            keeper.run(context(&snapshot), &gate(), &voucher("garden", "valid-policy", 2000)).await,
+            keeper.collect(context(&snapshot)).await,
+            Err(Error::Invalid)
+        ));
+    }
+    for value in [
+        serde_json::Value::Null,
+        "thirty".into(),
+        0.into(),
+        366.into(),
+    ] {
+        let mut snapshot = original.clone();
+        snapshot
+            .content
+            .insert(gates::VOUCHER_VALIDITY_DAYS.into(), value);
+        assert!(matches!(
+            keeper
+                .run(
+                    context(&snapshot),
+                    &gate(),
+                    &voucher("garden", "valid-policy", 2000)
+                )
+                .await,
             Err(Error::Policy)
         ));
     }
-    keeper.run(context(&original), &gate(), &voucher("garden", "valid-policy", 2000)).await.unwrap();
+    keeper
+        .run(
+            context(&original),
+            &gate(),
+            &voucher("garden", "valid-policy", 2000),
+        )
+        .await
+        .unwrap();
 }
 
 #[test]
@@ -593,7 +628,9 @@ fn voucher_catalogue_definition_is_idempotent_and_keeps_host_configuration() {
     let mut configured = crbk::Rulebook::default();
     let mut custom = first[gates::VOUCHER_VALIDITY_DAYS].clone();
     custom.default = 14.into();
-    configured.define(gates::VOUCHER_VALIDITY_DAYS, custom.clone()).unwrap();
+    configured
+        .define(gates::VOUCHER_VALIDITY_DAYS, custom.clone())
+        .unwrap();
     gates::define_settings(&mut configured).unwrap();
     assert_eq!(configured.catalog()[gates::VOUCHER_VALIDITY_DAYS], custom);
 }

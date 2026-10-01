@@ -222,7 +222,10 @@ async fn optional_claim_and_result_parity(store: impl Storage) {
         ..result.clone()
     };
     let second = Claim::new("cvch", vec![2; 32]).unwrap();
-    assert_eq!(store.commit(Some(&global), Some(&second)).await, Err(Error::Scope));
+    assert_eq!(
+        store.commit(Some(&global), Some(&second)).await,
+        Err(Error::Scope)
+    );
     store.commit(Some(&result), Some(&second)).await.unwrap();
     let later = GateResult {
         valid_until: 172800,
@@ -241,7 +244,10 @@ async fn optional_claim_and_result_parity(store: impl Storage) {
     assert!(store.load("alice").await.unwrap().is_empty());
     assert_eq!(store.commit(None, Some(&second)).await, Err(Error::Refused));
     for (subject, gate, provider) in [("", "cvch", "local"), ("alice", "cvch", "bad/provider")] {
-        assert_eq!(store.remove(subject, gate, provider).await, Err(Error::Invalid));
+        assert_eq!(
+            store.remove(subject, gate, provider).await,
+            Err(Error::Invalid)
+        );
     }
 }
 
@@ -275,10 +281,26 @@ async fn imported_storage_type_corruption_is_a_closed_failure() {
     let raw = db.community("garden").unwrap();
     let store = LibsqlStore::new(&db, "garden").unwrap();
     for (gate, provider, expiry) in [
-        (crlt::Value::Blob(vec![1]), crlt::Value::Text("local".into()), crlt::Value::Integer(86400)),
-        (crlt::Value::Text("cvch".into()), crlt::Value::Blob(vec![1]), crlt::Value::Integer(86400)),
-        (crlt::Value::Text("cvch".into()), crlt::Value::Text("local".into()), crlt::Value::Real(1.5)),
-        (crlt::Value::Text("cvch".into()), crlt::Value::Text("local".into()), crlt::Value::Integer(86401)),
+        (
+            crlt::Value::Blob(vec![1]),
+            crlt::Value::Text("local".into()),
+            crlt::Value::Integer(86400),
+        ),
+        (
+            crlt::Value::Text("cvch".into()),
+            crlt::Value::Blob(vec![1]),
+            crlt::Value::Integer(86400),
+        ),
+        (
+            crlt::Value::Text("cvch".into()),
+            crlt::Value::Text("local".into()),
+            crlt::Value::Real(1.5),
+        ),
+        (
+            crlt::Value::Text("cvch".into()),
+            crlt::Value::Text("local".into()),
+            crlt::Value::Integer(86401),
+        ),
     ] {
         raw.execute(
             "INSERT INTO cgts_results (subject, gate, provider, valid_until) VALUES (?1, ?2, ?3, ?4)",
@@ -304,5 +326,8 @@ fn identifiers_and_claim_markers_enforce_byte_boundaries() {
         assert!(matches!(Claim::new("cvch", marker), Err(Error::Invalid)));
     }
     assert!(Claim::new("cvch", vec![1; 128]).is_ok());
-    assert!(matches!(Claim::new("bad/domain", vec![1]), Err(Error::Invalid)));
+    assert!(matches!(
+        Claim::new("bad/domain", vec![1]),
+        Err(Error::Invalid)
+    ));
 }

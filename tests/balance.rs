@@ -343,7 +343,10 @@ fn pin_spend_uses_the_leaf_binding_and_stays_disabled_for_every_transition() {
         ));
     }
     let invalid = Change { member: "", ..base };
-    assert!(matches!(pins::change_binding(&invalid), Err(Error::Invalid)));
+    assert!(matches!(
+        pins::change_binding(&invalid),
+        Err(Error::Invalid)
+    ));
     assert!(matches!(
         pins::verify_encoded_pin_change(&invalid, &[]),
         Err(Error::Invalid)
