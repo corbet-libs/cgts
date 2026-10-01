@@ -97,8 +97,13 @@ async fn verified_global_gates_bind_subject_scope_epoch_and_action() {
         })
         .unwrap(),
     );
-    snapshot.content.insert(crbk::gate_key(GateLevel::Community, "email"), true.into());
-    snapshot.content.insert(crbk::provider_key(GateLevel::Community, "email", "local"), true.into());
+    snapshot
+        .content
+        .insert(crbk::gate_key(GateLevel::Community, "email"), true.into());
+    snapshot.content.insert(
+        crbk::provider_key(GateLevel::Community, "email", "local"),
+        true.into(),
+    );
     let context = Context {
         subject: &subject,
         ..context(&snapshot)
@@ -136,13 +141,19 @@ async fn verified_global_gates_bind_subject_scope_epoch_and_action() {
         )
         .await
         .unwrap();
-    store.commit(Some(&GateResult {
-        gate: "email".into(),
-        level: GateLevel::Community,
-        subject: subject.clone(),
-        provider: "local".into(),
-        valid_until: 86400,
-    }), None).await.unwrap();
+    store
+        .commit(
+            Some(&GateResult {
+                gate: "email".into(),
+                level: GateLevel::Community,
+                subject: subject.clone(),
+                provider: "local".into(),
+                valid_until: 86400,
+            }),
+            None,
+        )
+        .await
+        .unwrap();
     let combined = Gatekeeper::new(
         store,
         LegalGate::new(clbs::MemoryStore::new("garden").unwrap(), Authority),

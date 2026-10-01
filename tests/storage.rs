@@ -370,10 +370,12 @@ async fn imported_rowid_schema_with_a_real_scan_fails_the_plan_gate() {
     let path = dir.path().join("scan.db");
     // A real imported schema can preserve namespace integrity yet lose the
     // gate-specific index. Populate and analyze it with the maintained driver.
-    let schema = SCHEMA.replace(
-        "PRIMARY KEY (community_id, subject, gate, provider)",
-        "id INTEGER NOT NULL, PRIMARY KEY (community_id, id)",
-    ).replace(" WITHOUT ROWID", "");
+    let schema = SCHEMA
+        .replace(
+            "PRIMARY KEY (community_id, subject, gate, provider)",
+            "id INTEGER NOT NULL, PRIMARY KEY (community_id, id)",
+        )
+        .replace(" WITHOUT ROWID", "");
     let imported = libsql::Builder::new_local(&path).build().await.unwrap();
     let connection = imported.connect().unwrap();
     connection.execute_batch(&schema).await.unwrap();
@@ -387,7 +389,8 @@ async fn imported_rowid_schema_with_a_real_scan_fails_the_plan_gate() {
     drop(connection);
     drop(imported);
     let db = crlt::Db::open(crlt::Config::new(format!("file://{}", path.display()), ""))
-        .await.unwrap();
+        .await
+        .unwrap();
     db.migrate(&[]).await.unwrap();
     let store = LibsqlStore::new(&db, "garden").unwrap();
     assert_eq!(store.check_query_plans().await, Err(Error::Storage));
