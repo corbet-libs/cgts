@@ -510,7 +510,11 @@ async fn sponsor_key_port_accepts_both_upstream_versions_and_raw_bytes() {
     ] {
         let keeper = memory("garden");
         let checked = keeper
-            .run(context(&snapshot), &gate, &voucher("garden", "key-port", 2000))
+            .run(
+                context(&snapshot),
+                &gate,
+                &voucher("garden", "key-port", 2000),
+            )
             .await
             .unwrap();
         assert_eq!(checked.result().gate, "cvch");
@@ -522,7 +526,11 @@ async fn sponsor_key_port_accepts_both_upstream_versions_and_raw_bytes() {
     .unwrap();
     assert!(matches!(
         memory("garden")
-            .run(context(&snapshot), &wrong, &voucher("garden", "wrong-key", 2000))
+            .run(
+                context(&snapshot),
+                &wrong,
+                &voucher("garden", "wrong-key", 2000)
+            )
             .await,
         Err(Error::Refused)
     ));
