@@ -728,7 +728,7 @@ dependencies = [
  "ed25519-dalek 2.2.0",
  "ed25519-dalek 3.0.0",
  "libsql",
- "rand 0.8.8",
+ "rand 0.10.3",
  "serde",
  "serde_json",
  "tempfile",
