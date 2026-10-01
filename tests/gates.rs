@@ -497,3 +497,52 @@ async fn every_retained_provider_expiry_is_rounded_down_to_a_day() {
         172800
     );
 }
+
+#[tokio::test]
+async fn sponsor_key_port_accepts_both_upstream_versions_and_raw_bytes() {
+    let key = ed25519_dalek::SigningKey::from_bytes(&[7; 32]).verifying_key();
+    let legacy = ed25519_dalek_v2::SigningKey::from_bytes(&[7; 32]).verifying_key();
+    let snapshot = snapshot("garden", "cvch");
+    for gate in [
+        gates::VoucherGate::new("local", key).unwrap(),
+        gates::VoucherGate::new("local", legacy).unwrap(),
+        gates::VoucherGate::new("local", key.to_bytes()).unwrap(),
+    ] {
+        let keeper = memory("garden");
+        let checked = keeper
+            .run(context(&snapshot), &gate, &voucher("garden", "key-port", 2000))
+            .await
+            .unwrap();
+        assert_eq!(checked.result().gate, "cvch");
+    }
+    let wrong = gates::VoucherGate::new(
+        "local",
+        ed25519_dalek_v2::SigningKey::from_bytes(&[8; 32]).verifying_key(),
+    )
+    .unwrap();
+    assert!(matches!(
+        memory("garden")
+            .run(context(&snapshot), &wrong, &voucher("garden", "wrong-key", 2000))
+            .await,
+        Err(Error::Refused)
+    ));
+}
+
+#[test]
+fn sponsor_key_port_rejects_malformed_bytes() {
+    for bytes in [vec![], vec![7; 31], vec![7; 33]] {
+        assert!(matches!(
+            gates::VoucherGate::new("local", bytes),
+            Err(Error::Invalid)
+        ));
+    }
+    // Select a rejected encoding with the maintained decoder, not local curve logic.
+    let invalid = (0..=u8::MAX)
+        .map(|byte| [byte; 32])
+        .find(|bytes| ed25519_dalek::VerifyingKey::from_bytes(bytes).is_err())
+        .unwrap();
+    assert!(matches!(
+        gates::VoucherGate::new("local", invalid),
+        Err(Error::Invalid)
+    ));
+}

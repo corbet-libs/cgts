@@ -34,7 +34,7 @@ and contract before integration.
 | [Cedar](https://github.com/cedar-policy/cedar) 4.13 / crates.io `gate` 0.6.3 | Cedar is a maintained general authorization language, broader than this facade and redundant with crbk. The `gate` crate is a game library. Neither replaces domain leaf composition. |
 | [Serde](https://github.com/serde-rs/serde), serde_json, thiserror | Maintained encoding and redacted errors. No custom serialization parser. |
 | [async-trait](https://github.com/dtolnay/async-trait) | Considered; native Rust future-returning traits suffice, avoiding allocation/dynamic dispatch. |
-| [ed25519-dalek](https://github.com/dalek-cryptography/curve25519-dalek) | Only the cvch configuration key type and real test signatures; no local crypto implementation. |
+| [ed25519-dalek](https://github.com/dalek-cryptography/curve25519-dalek) | Maintained public-key decoding compatible with current cvch and real test signatures; the trusted sponsor port accepts key bytes or upstream v2/v3 keys, without coupling callers to one key type. No local crypto implementation. |
 
 External dependencies are MIT, Apache-2.0 or BSD-3-Clause; sibling leaves use
 LGPL with their linking exception. No GPL-only or AGPL-only dependency is added.

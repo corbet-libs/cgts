@@ -255,7 +255,7 @@ async fn record_gate_refuses_without_the_complete_extension_relation() {
                 checkpoint_period_seconds: 1000,
             },
             verifier,
-            SigningKey::from_bytes(&[9; 32]),
+            ed25519_dalek_v2::SigningKey::from_bytes(&[9; 32]),
         )
         .unwrap()
     })
