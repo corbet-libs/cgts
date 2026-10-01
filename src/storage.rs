@@ -246,3 +246,7 @@ impl Storage for LibsqlStore {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "tests/storage.rs"]
+mod tests;
