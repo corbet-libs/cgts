@@ -463,39 +463,36 @@ async fn checked_evidence_cannot_hide_changed_settings_behind_the_same_revision(
 
 #[tokio::test]
 async fn every_retained_provider_expiry_is_rounded_down_to_a_day() {
-    struct Provider(i64);
-    impl Gate for Provider {
-        type Input = ();
+    // A host adapter over real signed voucher verification: its retained lifetime
+    // is the authenticated redemption deadline, so the facade must round it.
+    struct SignedDeadline(GateLevel);
+    impl Gate for SignedDeadline {
+        type Input = cvch::Voucher;
         fn descriptor(&self) -> Descriptor {
             Descriptor {
-                gate: "day".into(),
-                provider: "local".into(),
-                level: GateLevel::Community,
-                steps: vec![Step {
-                    id: "check".into(),
-                    description: "Check a fixture expiry".into(),
-                    input: "unit".into(),
-                }],
+                level: self.0,
+                ..gate().descriptor()
             }
         }
-        async fn verify(&self, _: Context<'_>, _: &()) -> Result<Proof> {
-            Ok(Proof::retained(self.0))
+        async fn verify(&self, context: Context<'_>, input: &cvch::Voucher) -> Result<Proof> {
+            gate().verify(context, input).await?;
+            Ok(Proof::retained(input.valid_until as i64))
         }
     }
     let keeper = memory("garden");
-    let snapshot = snapshot("garden", "day");
-    let context = context(&snapshot);
-    let checked = keeper.run(context, &Provider(172923), &()).await.unwrap();
+    let snapshot = snapshot("garden", "cvch");
+    let context = Context { now: 86401, ..context(&snapshot) };
+    let provider = SignedDeadline(GateLevel::Community);
+    let accepted = voucher("garden", "deadline", 172923);
+    let checked = keeper.run(context, &provider, &accepted).await.unwrap();
     assert_eq!(checked.result().valid_until, 172800);
-    assert_eq!(
-        keeper.collect(context).await.unwrap()[0].valid_until,
-        172800
-    );
-    assert!(keeper.run(context, &Provider(2000), &()).await.is_err());
-    assert_eq!(
-        keeper.collect(context).await.unwrap()[0].valid_until,
-        172800
-    );
+    assert_eq!(keeper.collect(context).await.unwrap()[0].valid_until, 172800);
+    // Authentic unexpired evidence can still have a coarse deadline in the past.
+    let short = voucher("garden", "short-deadline", 86402);
+    assert!(matches!(keeper.run(context, &provider, &short).await, Err(Error::Refused)));
+    assert_eq!(keeper.collect(context).await.unwrap()[0].valid_until, 172800);
+    assert!(matches!(keeper.run(context, &SignedDeadline(GateLevel::Global), &accepted).await, Err(Error::Scope)));
+    assert!(matches!(keeper.check(context, vec![checked.clone(), checked]).await, Err(Error::Scope)));
 }
 
 #[tokio::test]

@@ -76,6 +76,10 @@ async fn actual_signed_profile_is_bound_to_scope_and_never_retained() {
         keeper.run(context, &gate, &bad).await,
         Err(Error::Refused)
     ));
+    assert!(matches!(
+        gate.verify(Context { now: -1, ..context }, &fixture.bundle).await,
+        Err(Error::Invalid)
+    ));
     gate.policy.community = "other";
     assert!(matches!(
         gate.verify(context, &fixture.bundle).await,
