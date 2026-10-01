@@ -155,6 +155,10 @@ async fn missing_schema_legal_failure_and_corrupt_results_never_allow() {
     .await
     .unwrap();
     let snapshot = snapshot("garden", "cvch");
+    assert_eq!(
+        LibsqlStore::new(&db, "garden").unwrap().check_query_plans().await,
+        Err(Error::Storage)
+    );
     assert!(matches!(
         sql(&db, "garden")
             .decide(context(&snapshot), MembershipState::Pending, &[])
@@ -330,4 +334,19 @@ fn identifiers_and_claim_markers_enforce_byte_boundaries() {
         Claim::new("bad/domain", vec![1]),
         Err(Error::Invalid)
     ));
+}
+
+#[tokio::test]
+async fn query_plan_check_refuses_an_import_missing_the_spend_table() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = crlt::Db::open(crlt::Config::new(
+        format!("file://{}", dir.path().join("incomplete-schema.db").display()),
+        "",
+    )).await.unwrap();
+    let results_only = SCHEMA.split("CREATE TABLE cgts_spent").next().unwrap();
+    db.migrate(&[crlt::Migration::new(1, "incomplete-import", results_only)]).await.unwrap();
+    assert_eq!(
+        LibsqlStore::new(&db, "garden").unwrap().check_query_plans().await,
+        Err(Error::Storage)
+    );
 }

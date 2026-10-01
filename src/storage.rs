@@ -153,23 +153,16 @@ impl LibsqlStore {
 
     /// Check every production query/write shape against real SQLite query plans.
     pub async fn check_query_plans(&self) -> Result<()> {
-        self.db.explain(LOAD, ["subject"]).await?.assert_indexed()?;
-        self.db
-            .explain(DELETE, params!["subject", "gate", "provider"])
-            .await?
-            .assert_indexed()?;
-        self.db
-            .explain(INSERT, params!["subject", "gate", "provider", 1i64])
-            .await?
-            .assert_indexed()?;
-        self.db
-            .explain(CLAIM, params!["gate", vec![0u8]])
-            .await?
-            .assert_indexed()?;
-        self.db
-            .explain(SPEND, params!["gate", vec![0u8]])
-            .await?
-            .assert_indexed()?;
+        let plans = [
+            (LOAD, params!["subject"]),
+            (DELETE, params!["subject", "gate", "provider"]),
+            (INSERT, params!["subject", "gate", "provider", 1i64]),
+            (CLAIM, params!["gate", vec![0u8]]),
+            (SPEND, params!["gate", vec![0u8]]),
+        ];
+        for (statement, parameters) in plans {
+            self.db.explain(statement, parameters).await?.assert_indexed()?;
+        }
         Ok(())
     }
 }
