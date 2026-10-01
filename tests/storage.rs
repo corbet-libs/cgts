@@ -363,3 +363,33 @@ async fn query_plan_check_refuses_an_import_missing_the_spend_table() {
         Err(Error::Storage)
     );
 }
+
+#[tokio::test]
+async fn imported_rowid_schema_with_a_real_scan_fails_the_plan_gate() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("scan.db");
+    // A real imported schema can preserve namespace integrity yet lose the
+    // gate-specific index. Populate and analyze it with the maintained driver.
+    let schema = SCHEMA.replace(
+        "PRIMARY KEY (community_id, subject, gate, provider)",
+        "id INTEGER NOT NULL, PRIMARY KEY (community_id, id)",
+    ).replace(" WITHOUT ROWID", "");
+    let imported = libsql::Builder::new_local(&path).build().await.unwrap();
+    let connection = imported.connect().unwrap();
+    connection.execute_batch(&schema).await.unwrap();
+    for id in 0..100i64 {
+        connection.execute(
+            "INSERT INTO cgts_results (community_id, id, subject, gate, provider, valid_until) VALUES ('garden', ?1, 'subject', ?2, 'provider', 86400)",
+            libsql::params![id, format!("gate{id}")],
+        ).await.unwrap();
+    }
+    connection.execute_batch("ANALYZE").await.unwrap();
+    drop(connection);
+    drop(imported);
+    let db = crlt::Db::open(crlt::Config::new(format!("file://{}", path.display()), ""))
+        .await.unwrap();
+    db.migrate(&[]).await.unwrap();
+    let store = LibsqlStore::new(&db, "garden").unwrap();
+    assert_eq!(store.check_query_plans().await, Err(Error::Storage));
+    assert_eq!(store.load("subject").await, Err(Error::Storage));
+}

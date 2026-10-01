@@ -27,6 +27,8 @@ thiserror = "2"
 tokio = { version = "1", features = ["rt"] }
 
 [dev-dependencies]
+# Build actual imported SQLite fixtures; production storage remains through crlt.
+libsql = { version = "0.9.30", default-features = false, features = ["core"] }
 # Current cblc constructors still require the preceding upstream key type.
 ed25519-dalek-v2 = { package = "ed25519-dalek", version = "2.2" }
 csgn = { git = "https://github.com/corbet-foss/csgn", branch = "main", default-features = false, features = ["volatile-signer"] }
