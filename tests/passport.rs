@@ -114,17 +114,34 @@ async fn verified_global_gates_bind_subject_scope_epoch_and_action() {
     let mut other_community = snapshot.clone();
     other_community.community = "other".into();
     assert!(matches!(
-        verified.gates(Context { snapshot: &other_community, ..context }),
+        verified.gates(Context {
+            snapshot: &other_community,
+            ..context
+        }),
         Err(Error::Scope)
     ));
     let store = MemoryStore::new("garden").unwrap();
-    store.commit(Some(&GateResult {
-        gate: "phone".into(), level: GateLevel::Community,
-        subject: subject.clone(), provider: "local".into(), valid_until: 86400,
-    }), None).await.unwrap();
+    store
+        .commit(
+            Some(&GateResult {
+                gate: "phone".into(),
+                level: GateLevel::Community,
+                subject: subject.clone(),
+                provider: "local".into(),
+                valid_until: 86400,
+            }),
+            None,
+        )
+        .await
+        .unwrap();
     let combined = Gatekeeper::new(
-        store, LegalGate::new(clbs::MemoryStore::new("garden").unwrap(), Authority),
-    ).unwrap().check(context, gates.clone()).await.unwrap();
+        store,
+        LegalGate::new(clbs::MemoryStore::new("garden").unwrap(), Authority),
+    )
+    .unwrap()
+    .check(context, gates.clone())
+    .await
+    .unwrap();
     assert_eq!(combined.in_context(context).unwrap().len(), 2);
 
     assert!(
