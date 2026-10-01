@@ -156,7 +156,10 @@ impl LibsqlStore {
         let plans = [
             (LOAD, Vec::from(params!["subject"])),
             (DELETE, Vec::from(params!["subject", "gate", "provider"])),
-            (INSERT, Vec::from(params!["subject", "gate", "provider", 1i64])),
+            (
+                INSERT,
+                Vec::from(params!["subject", "gate", "provider", 1i64]),
+            ),
             (CLAIM, Vec::from(params!["gate", vec![0u8]])),
             (SPEND, Vec::from(params!["gate", vec![0u8]])),
         ];
