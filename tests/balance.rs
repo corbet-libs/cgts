@@ -293,6 +293,10 @@ async fn record_gate_refuses_without_the_complete_extension_relation() {
         keeper.run(context(&snapshot), &gate, &input).await,
         Err(Error::ExtensionsUnavailable)
     ));
+    assert!(matches!(
+        gate.verify(context(&snapshot), &input).await,
+        Err(Error::ExtensionsUnavailable)
+    ));
     input.record.context.purpose = RecordUse::FirstContact;
     assert!(matches!(
         keeper.run(context(&snapshot), &gate, &input).await,

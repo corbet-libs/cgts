@@ -72,6 +72,10 @@ async fn verified_global_gates_bind_subject_scope_epoch_and_action() {
         verify_passport(&verifier, &mut rng, &request, &proof, 4, 1100).await,
         Err(Error::Refused)
     ));
+    assert!(matches!(
+        verify_passport(&verifier, &mut rng, &request, &proof, 4, 86400).await,
+        Err(Error::Refused)
+    ));
     let subject = verified.pseudonym().to_hex();
     let mut snapshot = snapshot("garden", "phone");
     snapshot
@@ -107,6 +111,22 @@ async fn verified_global_gates_bind_subject_scope_epoch_and_action() {
             .allowed
     );
     assert!(keeper.collect(context).await.unwrap().is_empty());
+    let mut other_community = snapshot.clone();
+    other_community.community = "other".into();
+    assert!(matches!(
+        verified.gates(Context { snapshot: &other_community, ..context }),
+        Err(Error::Scope)
+    ));
+    let store = MemoryStore::new("garden").unwrap();
+    store.commit(Some(&GateResult {
+        gate: "phone".into(), level: GateLevel::Community,
+        subject: subject.clone(), provider: "local".into(), valid_until: 86400,
+    }), None).await.unwrap();
+    let combined = Gatekeeper::new(
+        store, LegalGate::new(clbs::MemoryStore::new("garden").unwrap(), Authority),
+    ).unwrap().check(context, gates.clone()).await.unwrap();
+    assert_eq!(combined.in_context(context).unwrap().len(), 2);
+
     assert!(
         verified
             .gates(Context {
