@@ -20,7 +20,7 @@ retained. Only current metadata and opaque spent markers reach storage.
 ## Dependency survey
 
 Checked crates.io and GitHub sources on 2026-09-30; direct cvld dependencies
-are pinned by full Git revision in Cargo.toml. Read each available leaf README
+follow main in Cargo.toml and resolve to one revision each in Cargo.lock. Read each available leaf README
 and contract before integration.
 
 | Candidate | Choice and reason |
@@ -38,8 +38,8 @@ and contract before integration.
 
 External dependencies are MIT, Apache-2.0 or BSD-3-Clause; sibling leaves use
 LGPL with their linking exception. No GPL-only or AGPL-only dependency is added.
-Test-only csgn parses cgrd's frozen public signing vector at its matching pinned
-wire revision. Tokio runs synchronous cblc verification on a blocking thread;
+Test-only csgn parses cgrd's frozen public signing vector through its current
+compatible wire API. Tokio runs synchronous cblc verification on a blocking thread;
 tempfile and data-encoding support real database and signed balance tests.
 Cargo.lock pins transitive upstream branch dependencies, including cssr, cvfy
 and czkp. CI uses --locked and retains the lockfile for reproducibility.
@@ -60,7 +60,7 @@ committed or configured in public CI.
 
 ## Remaining integration boundaries
 
-The pinned cblc now supplies its extension circuit, holder and real proof tests.
+The cblc leaf supplies its extension circuit, holder and real proof tests.
 The facade's balance and spent-pin adapters remain disabled until their verified
 acceptances are wired into the atomic field-change flow. Signed acceptance tests
 here exercise binding and replay protection, not hidden balance mathematics. Fresh record
