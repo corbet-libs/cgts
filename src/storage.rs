@@ -154,11 +154,11 @@ impl LibsqlStore {
     /// Check every production query/write shape against real SQLite query plans.
     pub async fn check_query_plans(&self) -> Result<()> {
         let plans = [
-            (LOAD, params!["subject"]),
-            (DELETE, params!["subject", "gate", "provider"]),
-            (INSERT, params!["subject", "gate", "provider", 1i64]),
-            (CLAIM, params!["gate", vec![0u8]]),
-            (SPEND, params!["gate", vec![0u8]]),
+            (LOAD, Vec::from(params!["subject"])),
+            (DELETE, Vec::from(params!["subject", "gate", "provider"])),
+            (INSERT, Vec::from(params!["subject", "gate", "provider", 1i64])),
+            (CLAIM, Vec::from(params!["gate", vec![0u8]])),
+            (SPEND, Vec::from(params!["gate", vec![0u8]])),
         ];
         for (statement, parameters) in plans {
             self.db
